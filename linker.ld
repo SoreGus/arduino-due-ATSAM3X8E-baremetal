@@ -1,14 +1,9 @@
 ENTRY(Reset_Handler)
 
-/* Arduino Due (SAM3X8E):
-   Flash: 512 KB at 0x00080000
-   SRAM:  96 KB at 0x20070000 (SAM3X has SRAM0+SRAM1 contiguous in that region)
-*/
-
 MEMORY
 {
   FLASH (rx)  : ORIGIN = 0x00080000, LENGTH = 512K
-  RAM   (rwx) : ORIGIN = 0x20070000, LENGTH = 96K
+  RAM   (rwx) : ORIGIN = 0x20000000, LENGTH = 96K
 }
 
 _estack = ORIGIN(RAM) + LENGTH(RAM);
@@ -24,6 +19,14 @@ SECTIONS
   {
     *(.text*)
     *(.rodata*)
+
+    /* Keep unwind / GOT / Swift metadata inside FLASH before _etext */
+    *(.ARM.exidx*)
+    *(.ARM.extab*)
+    *(.got*)
+    *(.got.plt*)
+    *(.swift_modhash*)
+
     _etext = .;
   } > FLASH
 
