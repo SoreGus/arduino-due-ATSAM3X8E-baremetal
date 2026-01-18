@@ -1,0 +1,23 @@
+# ========= Build artifacts =========
+*.o
+*.elf
+*.bin
+*.map
+
+# ========= Logs =========
+last_run.log
+
+# ========= Temporary files =========
+*.tmp
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ========= Toolchain / debug leftovers =========
+*.d
+*.lst
+
+# ========= Editor / IDE =========
+.vscode/
+.idea/
