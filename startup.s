@@ -4,9 +4,10 @@
 
 .global Reset_Handler
 .global Default_Handler
-.extern main
 
-/* Linker symbols */
+.extern main
+.extern SysTick_Handler
+
 .extern _estack
 .extern _sidata
 .extern _sdata
@@ -18,25 +19,31 @@
 .section .isr_vector, "a", %progbits
 .global g_pfnVectors
 .type g_pfnVectors, %object
+
+/* ✅ Cortex-M requer alinhamento do VTOR:
+   - mínimo 128 bytes em muitos casos (depende do nº de IRQs)
+*/
+.balign 128
 g_pfnVectors:
   .word _estack
   .word Reset_Handler
-  .word Default_Handler /* NMI */
-  .word Default_Handler /* HardFault */
-  .word Default_Handler /* MemManage */
-  .word Default_Handler /* BusFault */
-  .word Default_Handler /* UsageFault */
+  .word Default_Handler     /* NMI */
+  .word Default_Handler     /* HardFault */
+  .word Default_Handler     /* MemManage */
+  .word Default_Handler     /* BusFault */
+  .word Default_Handler     /* UsageFault */
   .word 0
   .word 0
   .word 0
   .word 0
-  .word Default_Handler /* SVC */
-  .word Default_Handler /* DebugMon */
+  .word Default_Handler     /* SVC */
+  .word Default_Handler     /* DebugMon */
   .word 0
-  .word Default_Handler /* PendSV */
-  .word Default_Handler /* SysTick */
+  .word Default_Handler     /* PendSV */
 
-  /* External IRQs: keep a bunch default */
+  /* ✅ CRÍTICO: handler em Thumb -> +1 */
+  .word (SysTick_Handler + 1) /* SysTick */
+
   .rept 64
     .word Default_Handler
   .endr
@@ -71,6 +78,14 @@ Reset_Handler:
   b   3b
 
 4:
+  /* ✅ VTOR = endereço do nosso vetor */
+  ldr r0, =0xE000ED08        /* SCB->VTOR */
+  ldr r1, =g_pfnVectors
+  str r1, [r0]
+
+  /* ✅ Habilita IRQs */
+  cpsie i
+
   bl  main
 
 5:
@@ -82,4 +97,5 @@ Reset_Handler:
 .type Default_Handler, %function
 Default_Handler:
   b Default_Handler
-  
+
+.section .note.GNU-stack,"",%progbits

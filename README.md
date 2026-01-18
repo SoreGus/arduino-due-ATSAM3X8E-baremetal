@@ -1,30 +1,31 @@
 # ATSAM3X8E Bare Metal (Arduino Due) — Embedded Swift
 
-Bare-metal firmware project for the **ATSAM3X8E** microcontroller (ARM Cortex-M3),
+Bare‑metal firmware project for the **ATSAM3X8E** microcontroller (ARM Cortex‑M3),
 used on the **Arduino Due** board, written in **Embedded Swift**.
 
-This repository demonstrates that **Swift can be used as a systems / embedded
-language**, compiling directly to ARM machine code and running **without an OS,
-without Arduino core, without CMSIS, and without HAL**.
+This repository demonstrates that **Swift can be used as a systems / embedded language**,
+compiling directly to ARM machine code and running **without an OS, without Arduino Core,
+without CMSIS, and without any HAL**.
 
-The project uses:
-- a custom linker script
-- custom startup code
-- a minimal runtime layer
-- Swift compiled in *Embedded Swift* mode
-- ARM GNU toolchain for final linking
-- BOSSA (`bossac`) for flashing via the Arduino Due bootloader
+What’s included:
+- custom linker script (`linker.ld`)
+- custom startup + vector table (`startup.s`)
+- a minimal C support layer (`support.c`)
+- Swift compiled in **Embedded Swift** mode
+- final link with **ARM GNU** toolchain
+- flashing via **BOSSA** (`bossac`) using the Due bootloader
+- **real 84 MHz clock init** (PLLA → MCK) and **SysTick 1ms timer**
 
 ---
 
 ## Target MCU
 
 - MCU: **ATSAM3X8E**
-- Architecture: **ARM Cortex-M3 (ARMv7-M)**
+- Architecture: **ARM Cortex‑M3 (ARMv7‑M)**
 - Max clock: **84 MHz**
 - Flash: **512 KB**
 - SRAM: **96 KB**
-- Boot ROM: **SAM-BA**
+- Boot ROM: **SAM‑BA**
 - Board: **Arduino Due**
 - LED example: **PB27 (Arduino pin D13 / LED “L”)**
 
@@ -32,47 +33,87 @@ The project uses:
 
 ## What “Embedded Swift” Means Here
 
-This project uses **Swift as a language frontend only**, not as a full runtime.
+This project uses Swift as a **language frontend** in a freestanding environment.
 
-✔ Swift is compiled to ARM object files (`.o`)  
-✔ Code runs **bare metal**  
-✔ No operating system  
-✔ No Arduino framework  
-✔ No CMSIS / HAL  
-✔ No Foundation  
-✔ No libc  
-✔ No dynamic allocation required  
+✅ Swift compiles to ARM object code (`.o`)  
+✅ Code runs **bare metal**  
+✅ No OS  
+✅ No Arduino framework  
+✅ No CMSIS / HAL  
+✅ No Foundation  
+✅ No libc required  
 
-Swift code is linked exactly like C code and entered from `startup.s`
-via a C-ABI symbol:
+The entry point is a C‑ABI symbol exported from Swift:
 
 ```swift
 @_cdecl("main")
 public func main() -> Never
 ```
 
-This allows Swift to behave like a low-level systems language, similar to C
-or Rust, while keeping Swift’s syntax and type safety.
+`startup.s` calls `main()` after:
+- copying `.data` from Flash → RAM
+- zeroing `.bss`
+- setting `SCB->VTOR` to the local vector table
+- enabling interrupts
+
+---
+
+## Repository Layout
+
+- `main.swift`  
+  Minimal blink example using **PIOB PB27** + **SysTick Timer**.
+
+- `Timer.swift`  
+  SysTick configured for **1 ms tick** and a busy‑wait `sleep(ms:)`.
+
+- `Clock.swift`  
+  Initializes **84 MHz** by enabling the crystal oscillator, configuring **PLLA**, and
+  switching **MCK** to PLLA. Uses timeouts to avoid silent hangs.
+
+- `MMIO.swift`  
+  Low‑level MMIO helpers and small barrier/IRQ functions exposed from `support.c`.
+
+- `startup.s`  
+  Vector table + Reset handler. Installs VTOR and wires SysTick to `SysTick_Handler`.
+
+- `linker.ld`  
+  Memory map for ATSAM3X8E (Flash @ `0x00080000`, SRAM @ `0x20070000`) and required
+  symbols for startup + minimal runtime.
+
+- `support.c`  
+  Minimal functions required by Embedded Swift (stack guard, allocator stub, memclr,
+  small PRNG), plus CPU helpers (`nop`, `cpsie/cpsid`, `dsb/isb`) and **volatile MMIO**
+  implementations.
+
+- `Makefile`  
+  Builds: `startup.o`, `support.o`, Swift module → `swift.o`, links → `firmware.elf`,
+  converts → `firmware.bin`.
+
+- `run.sh`  
+  Builds + auto‑detects serial port + triggers bootloader (1200 bps touch) + uploads
+  using `bossac`. Always overwrites `last_run.log` and prints colored status lines.
+
+---
 
 ## Requirements
 
-### Toolchain
-	•	arm-none-eabi-gcc
-	•	arm-none-eabi-objcopy
-	•	make
+### Toolchain (build/link)
+- `arm-none-eabi-gcc`
+- `arm-none-eabi-objcopy`
+- `make`
 
 ### Embedded Swift Toolchain
+You need a Swift snapshot toolchain that supports **Embedded Swift**.
+Recommended via **swiftly**.
 
-A Swift snapshot toolchain with Embedded Swift support is required.
+### Uploader
+- `bossac` (BOSSA)
 
-Recommended installation via swiftly.
+---
 
-Uploader
-	•	bossac (from BOSSA)
+## Installation
 
-### Installation
-
-#### macOS
+### macOS
 
 ```bash
 brew install make bossa
@@ -85,10 +126,12 @@ swiftly use main-snapshot
 ```
 
 Open a new shell and confirm:
+
 ```bash
 swiftc --version
 ```
-#### Linux (Debian / Ubuntu)
+
+### Linux (Debian / Ubuntu)
 
 ```bash
 sudo apt update
@@ -98,52 +141,101 @@ sudo apt install -y \
   binutils-arm-none-eabi \
   bossac
 ```
-Install swiftly and a snapshot toolchain according to:
+
+Install swiftly and a snapshot toolchain according to the official repo:
 https://github.com/apple/swiftly
 
-## Build
+---
+
+## Build Outputs
 
 Running the build produces:
-	•	firmware.elf — linked ELF file
-	•	firmware.bin — raw binary for flashing
-	•	firmware.map — linker map (useful for inspection)
 
-### Upload (Arduino Due)
-⚠️ Use the Programming Port, not the Native USB port.
+- `firmware.elf` — linked ELF file
+- `firmware.bin` — raw binary for flashing
+- `firmware.map` — linker map (useful for inspection)
+- `last_run.log` — last run log (overwritten each run)
+
+Clean:
+
+```bash
+make clean
+```
+
+---
+
+## Upload (Arduino Due)
+
+⚠️ Use the **Programming Port**, not the Native USB port.
+
 ```bash
 ./run.sh
 ```
 
 The script will:
-	1.	Verify required tools
-	2.	Compile Swift and assembly
-	3.	Link everything using the ARM GNU linker
-	4.	Detect the serial port automatically
-	5.	Trigger the 1200-bps bootloader reset
-	6.	Upload the firmware using bossac
+1. verify required tools
+2. compile Swift + assembly
+3. link using ARM GNU tools
+4. detect the serial port automatically
+5. trigger the 1200‑bps bootloader reset
+6. upload the firmware using `bossac`
 
+---
 
 ## Example Behavior
 
-The default firmware blinks:
-	•	LED: PB27
-	•	Board LED: Arduino Due “L” (D13)
+Default firmware blinks:
+
+- LED: **PB27**
+- Board LED: Arduino Due **“L” (D13)**
 
 This confirms:
-	•	Swift code is executing
-	•	MMIO writes are correct
-	•	Startup, linker, and runtime are working
+- Swift code is executing
+- MMIO writes are correct
+- startup + linker + minimal runtime are working
+- SysTick tick + clock config are functional
 
-## Notes
+---
 
-	•	This is true bare metal execution.
-	•	All memory initialization is manual.
-	•	No standard library is assumed.
-	•	Swift runtime usage is kept to the absolute minimum.
-	•	This repository is intended for:
-	    •	learning embedded systems internals
-	    •	experimenting with Embedded Swift
-	    •	serving as a clean base for custom firmware
+## Clock + Timer Notes (Important)
+
+### Real 84 MHz clock (no “fake delays”)
+`Clock.swift` configures:
+- crystal oscillator (MAINCK)
+- **PLLA** to 84 MHz (12 MHz × (MULA+1) / DIVA)
+- switches **MCK** to PLLA and waits for `MCKRDY`
+
+After that, SysTick uses `CLKSRC=CPU clock` so:
+
+```swift
+reload = cpuHz / 1000 - 1
+```
+
+becomes a real 1 ms tick when `cpuHz = 84_000_000`.
+
+### Volatile MMIO
+For robust polling loops (waiting on `PMC_SR` flags, etc.), reads/writes must not be
+optimized away. This repo provides `bm_read32/bm_write32` in `support.c` using
+`volatile` pointers. `MMIO.swift` should route `read32/write32` through those helpers.
+
+---
+
+## Troubleshooting
+
+- **LED stays ON or OFF forever**
+  - Confirm you are flashing via the **Programming Port**.
+  - Confirm `startup.s` installs VTOR and that SysTick vector points to
+    `SysTick_Handler`.
+
+- **SysTick timing wrong / too slow / too fast**
+  - Ensure `Clock.init84MHz()` runs successfully before starting SysTick.
+  - Ensure SysTick `CSR_CLKSRC` is set (CPU clock, not CPU/8).
+
+- **Build errors: missing symbols like `bm_enable_irq`**
+  - Ensure `MMIO.swift` declares the `_silgen_name` functions, and `support.c`
+    defines them with `__attribute__((used))`.
+
+---
 
 ## License
 

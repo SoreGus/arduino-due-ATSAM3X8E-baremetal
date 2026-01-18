@@ -1,72 +1,61 @@
-// main.swift — Arduino Due (ATSAM3X8E) — Blink LED (PB27 / D13) in Embedded Swift
+// main.swift — Blink PB27/D13 using SysTick Timer (Arduino Due)
 
-typealias U32 = UInt32
+private let PMC_BASE: U32  = 0x400E_0600
+private let PIOB_BASE: U32 = 0x400E_1000
+private let WDT_BASE: U32  = 0x400E_1A50
 
-@_silgen_name("bm_nop")
-func bm_nop() -> Void
+private let PMC_PCER0: U32 = PMC_BASE + 0x0010
 
-@inline(__always)
-func reg32(_ addr: U32) -> UnsafeMutablePointer<U32> {
-    // Safe enough for bare-metal MMIO. Crashes if addr invalid (as expected).
-    return UnsafeMutablePointer<U32>(bitPattern: UInt(addr))!
-}
+private let PIO_PER:  U32  = PIOB_BASE + 0x0000
+private let PIO_OER:  U32  = PIOB_BASE + 0x0010
+private let PIO_SODR: U32  = PIOB_BASE + 0x0030
+private let PIO_CODR: U32  = PIOB_BASE + 0x0034
 
-@inline(__always)
-func write32(_ addr: U32, _ value: U32) {
-    reg32(addr).pointee = value
-}
+private let WDT_MR: U32 = WDT_BASE + 0x0004
 
-@inline(__always)
-func delay(_ n: U32) {
-    var i = n
-    while i != 0 {
-        bm_nop()     // prevents the loop from being optimized away
-        i &-= 1
-    }
-}
-
-// --- SAM3X8E base addresses ---
-let PMC_BASE: U32  = 0x400E_0600
-let PIOB_BASE: U32 = 0x400E_1000
-let WDT_BASE: U32  = 0x400E_1A50
-
-// PMC
-let PMC_PCER0: U32 = PMC_BASE + 0x0010   // Peripheral Clock Enable Register 0 (write-only)
-
-// PIOB
-let PIO_PER:  U32  = PIOB_BASE + 0x0000  // PIO Enable Register (write-only)
-let PIO_OER:  U32  = PIOB_BASE + 0x0010  // Output Enable Register (write-only)
-let PIO_SODR: U32  = PIOB_BASE + 0x0030  // Set Output Data Register (write-only)
-let PIO_CODR: U32  = PIOB_BASE + 0x0034  // Clear Output Data Register (write-only)
-
-// Watchdog (WDT)
-let WDT_MR: U32 = WDT_BASE + 0x0004      // Mode Register
-
-// LED "L" on Arduino Due is PB27 (Arduino pin 13)  [oai_citation:0‡Arduino Official Store](https://store.arduino.cc/products/arduino-due?srsltid=AfmBOoqNIh16na3ZZY1olItnImXDwoGJVwv4tm57YI4IAWSEzrZ-jiWX&utm_source=chatgpt.com)
-let LED_PIN: U32  = 27
-let LED_MASK: U32 = (1 << LED_PIN)
-
-// Peripheral ID for PIOB on SAM3X is 13 (ID_PIOB)
-let ID_PIOB: U32  = 13
+private let LED_PIN: U32  = 27
+private let LED_MASK: U32 = (U32(1) << LED_PIN)
+private let ID_PIOB: U32  = 13
 
 @_cdecl("main")
 public func main() -> Never {
-    // Disable watchdog early (common cause of “runs but never blinks”)
-    // WDDIS bit = 1 (bit 15)
-    write32(WDT_MR, 1 << 15)
+    // Disable watchdog
+    write32(WDT_MR, U32(1) << 15)
 
-    // Enable clock for PIOB
-    write32(PMC_PCER0, 1 << ID_PIOB)
+    // ✅ Set clock ASAP (so everything after is “normal speed”)
+    let ok = DueClock.init84MHz()
+    if !ok {
+        // If clock init failed, blink slow forever
+        write32(PMC_PCER0, U32(1) << ID_PIOB)
+        write32(PIO_PER, LED_MASK)
+        write32(PIO_OER, LED_MASK)
 
-    // Enable PIO control and set PB27 as output
+        while true {
+            write32(PIO_SODR, LED_MASK); for _ in 0..<2_000_000 { bm_nop() }
+            write32(PIO_CODR, LED_MASK); for _ in 0..<2_000_000 { bm_nop() }
+        }
+    }
+
+    // Enable PIOB clock + PB27 output
+    write32(PMC_PCER0, U32(1) << ID_PIOB)
     write32(PIO_PER, LED_MASK)
     write32(PIO_OER, LED_MASK)
 
-    while true {
-        write32(PIO_SODR, LED_MASK)   // LED ON
-        delay(50_000)
+    // ✅ optional quick marker (now it will be quick for real)
+    write32(PIO_SODR, LED_MASK)
+    for _ in 0..<50_000 { bm_nop() }
+    write32(PIO_CODR, LED_MASK)
+    for _ in 0..<50_000 { bm_nop() }
 
-        write32(PIO_CODR, LED_MASK)   // LED OFF
-        delay(50_000)
+    bm_enable_irq()
+
+    let timer = Timer(cpuHz: 84_000_000)
+    timer.startTick1ms()
+
+    while true {
+        write32(PIO_SODR, LED_MASK)
+        timer.sleep(ms: 1000)
+        write32(PIO_CODR, LED_MASK)
+        timer.sleep(ms: 1000)
     }
 }
