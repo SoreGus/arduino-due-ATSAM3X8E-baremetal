@@ -21,3 +21,7 @@ last_run.log
 # ========= Editor / IDE =========
 .vscode/
 .idea/
+
+# ========= platform =========
+
+platform
