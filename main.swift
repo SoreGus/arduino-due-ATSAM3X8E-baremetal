@@ -41,12 +41,6 @@ public func main() -> Never {
     write32(PIO_PER, LED_MASK)
     write32(PIO_OER, LED_MASK)
 
-    // ✅ optional quick marker (now it will be quick for real)
-    write32(PIO_SODR, LED_MASK)
-    for _ in 0..<50_000 { bm_nop() }
-    write32(PIO_CODR, LED_MASK)
-    for _ in 0..<50_000 { bm_nop() }
-
     bm_enable_irq()
 
     let timer = Timer(cpuHz: 84_000_000)
