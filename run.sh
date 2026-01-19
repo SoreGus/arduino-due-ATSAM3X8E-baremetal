@@ -1,7 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LOG="last_run.log"
+# Always run from project root (folder where this script is)
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT_DIR"
+
+SRC_DIR="$ROOT_DIR/src"
+ARM_DIR="$ROOT_DIR/arm"
+BUILD_DIR="$ROOT_DIR/build"
+
+mkdir -p "$BUILD_DIR"
+
+LOG="$BUILD_DIR/last_run.log"
 : > "$LOG"
 
 TMP_PORTS_BEFORE="$(mktemp -t due_ports_before)"
@@ -178,6 +188,8 @@ pick_swiftc() {
 }
 
 # ---------- Main ----------
+log "Project root: $ROOT_DIR"
+log "Build dir: $BUILD_DIR"
 log "Log file: $LOG (always overwritten each run)"
 
 need_cmd make || { err "make not found"; echo; install_hints_toolchain | tee -a "$LOG"; exit 1; }
@@ -227,14 +239,22 @@ fi
 ok "Found: bossac -> $(command -v bossac)"
 run_cmd bossac --help || true
 
-run_cmd make clean || true
+run_cmd make clean \
+  BUILD_DIR="$BUILD_DIR" \
+  SRC_DIR="$SRC_DIR" \
+  ARM_DIR="$ARM_DIR" \
+  || true
+
 run_cmd make \
   SWIFTC="$SWIFTC_PATH" \
   SWIFT_RESOURCE_DIR="$SWIFT_RESOURCE_DIR" \
   SWIFT_TARGET="$SWIFT_TARGET" \
+  BUILD_DIR="$BUILD_DIR" \
+  SRC_DIR="$SRC_DIR" \
+  ARM_DIR="$ARM_DIR" \
   || { err "Build failed"; exit 1; }
 
-BIN="firmware.bin"
+BIN="$BUILD_DIR/firmware.bin"
 [[ -f "$BIN" ]] || { err "$BIN not generated (check Makefile)"; exit 1; }
 ok "Build OK -> $BIN"
 

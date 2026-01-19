@@ -1,4 +1,8 @@
 # Makefile — Arduino Due (ATSAM3X8E / Cortex-M3) — Swift Bare Metal (Embedded Swift)
+# Layout:
+#   src/   -> .swift + .c
+#   arm/   -> startup.s + linker.ld
+#   build/ -> all build artifacts (.o .elf .bin .map .log)
 
 TARGET      := firmware
 CPU         := cortex-m3
@@ -11,6 +15,10 @@ SWIFTC             ?= swiftc
 SWIFT_RESOURCE_DIR ?=
 SWIFT_TARGET       ?= armv7-none-none-eabi
 
+BUILD_DIR ?= build
+SRC_DIR   ?= src
+ARM_DIR   ?= arm
+
 ARCH_C  := -mcpu=$(CPU) -mthumb
 
 # Keep enums consistent across C objs (fixes "variable-size enums" warning)
@@ -18,7 +26,8 @@ CFLAGS  := $(ARCH_C) -O2 -ffreestanding -fno-builtin -Wall -Wextra \
            -fno-short-enums \
            -nostdlib -nostartfiles
 
-LDFLAGS := $(ARCH_C) -T linker.ld -Wl,-Map=$(TARGET).map -Wl,--gc-sections -nostdlib
+LDFLAGS := $(ARCH_C) -T $(ARM_DIR)/linker.ld \
+          -Wl,-Map=$(BUILD_DIR)/$(TARGET).map -Wl,--gc-sections -nostdlib
 
 # Embedded Swift flags:
 # - Use armv7-none-none-eabi (toolchain ships Swift.swiftmodule for it)
@@ -36,27 +45,44 @@ SWIFTFLAGS += -resource-dir $(SWIFT_RESOURCE_DIR) -I $(SWIFT_RESOURCE_DIR)/embed
 endif
 
 # ✅ Include Clock.swift (fixes "timer slow" by allowing DueClock.init84MHz)
-SWIFT_SRCS := MMIO.swift Clock.swift Timer.swift main.swift
+SWIFT_SRCS := $(SRC_DIR)/MMIO.swift \
+              $(SRC_DIR)/Clock.swift \
+              $(SRC_DIR)/Timer.swift \
+              $(SRC_DIR)/main.swift
 
-all: $(TARGET).bin
+STARTUP_S  := $(ARM_DIR)/startup.s
+LINKER_LD  := $(ARM_DIR)/linker.ld
 
-startup.o: startup.s
+STARTUP_O  := $(BUILD_DIR)/startup.o
+SUPPORT_O  := $(BUILD_DIR)/support.o
+SWIFT_O    := $(BUILD_DIR)/swift.o
+
+ELF := $(BUILD_DIR)/$(TARGET).elf
+BIN := $(BUILD_DIR)/$(TARGET).bin
+MAP := $(BUILD_DIR)/$(TARGET).map
+
+all: $(BIN)
+
+$(BUILD_DIR):
+	@mkdir -p $(BUILD_DIR)
+
+$(STARTUP_O): $(STARTUP_S) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-support.o: support.c
+$(SUPPORT_O): $(SRC_DIR)/support.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Compile ALL Swift sources together into ONE object (single Swift module)
-swift.o: $(SWIFT_SRCS)
+$(SWIFT_O): $(SWIFT_SRCS) | $(BUILD_DIR)
 	$(SWIFTC) $(SWIFTFLAGS) $(SWIFT_SRCS) -o $@
 
-$(TARGET).elf: startup.o support.o swift.o
-	$(CC) startup.o support.o swift.o $(LDFLAGS) -o $@
+$(ELF): $(STARTUP_O) $(SUPPORT_O) $(SWIFT_O) $(LINKER_LD) | $(BUILD_DIR)
+	$(CC) $(STARTUP_O) $(SUPPORT_O) $(SWIFT_O) $(LDFLAGS) -o $@
 
-$(TARGET).bin: $(TARGET).elf
+$(BIN): $(ELF) | $(BUILD_DIR)
 	$(OBJCOPY) -O binary $< $@
 
 clean:
-	rm -f *.o *.elf *.bin *.map last_run.log
+	rm -rf $(BUILD_DIR)
 
 .PHONY: all clean
