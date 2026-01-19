@@ -1,9 +1,10 @@
 # ========= Build artifacts =========
 *.o
 *.elf
-*.bin
+*.bin.code
 *.map
 build
+.build
 
 # ========= Logs =========
 last_run.log
@@ -22,3 +23,5 @@ last_run.log
 # ========= Editor / IDE =========
 .vscode/
 .idea/
+Due_BareMetal.code-workspace
+Open_Due_BareMetal.command

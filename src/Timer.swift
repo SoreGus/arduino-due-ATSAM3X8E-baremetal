@@ -1,14 +1,6 @@
 // Timer.swift — SysTick timer (Cortex-M3) for ATSAM3X8E (Arduino Due)
 // Depends on MMIO.swift providing: U32, bm_nop(), write32(), read32().
 
-private let SYST_CSR: U32 = 0xE000_E010
-private let SYST_RVR: U32 = 0xE000_E014
-private let SYST_CVR: U32 = 0xE000_E018
-
-private let CSR_ENABLE:  U32 = (U32(1) << 0)
-private let CSR_TICKINT: U32 = (U32(1) << 1)
-private let CSR_CLKSRC:  U32 = (U32(1) << 2) // CPU clock
-
 // MUST be global and single symbol.
 public var g_msTicks: U32 = 0
 
@@ -26,20 +18,24 @@ public final class Timer {
 
     public func startTick1ms() {
         // stop
-        write32(SYST_CSR, 0)
+        write32(ATSAM3X8E.SYST_CSR, 0)
 
         // reload = cpuHz/1000 - 1
         let reload = (cpuHz / 1_000) &- 1
-        write32(SYST_RVR, reload)
-        write32(SYST_CVR, 0)
+        write32(ATSAM3X8E.SYST_RVR, reload)
+        write32(ATSAM3X8E.SYST_CVR, 0)
 
         // enable + tickint + cpu clock
-        write32(SYST_CSR, CSR_CLKSRC | CSR_TICKINT | CSR_ENABLE)
+        write32(
+            ATSAM3X8E.SYST_CSR,
+            ATSAM3X8E.SysTick.CSR_CLKSRC |
+            ATSAM3X8E.SysTick.CSR_TICKINT |
+            ATSAM3X8E.SysTick.CSR_ENABLE
+        )
     }
 
     @inline(__always)
     public func millis() -> U32 {
-        // Force a real load every time
         bm_nop()
         return g_msTicks
     }
