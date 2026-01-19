@@ -31,49 +31,6 @@ run_cmd() {
   return $rc
 }
 
-# Loading spinner (no timer, no %). Logs command output only into last_run.log.
-run_cmd_loading() {
-  # Usage: run_cmd_loading "Description" cmd...
-  local desc="$1"; shift
-
-  # If stdout isn't a TTY (piped/CI), just run normally.
-  if [[ ! -t 1 ]]; then
-    run_cmd "$@"
-    return $?
-  fi
-
-  local spin='|/-\'
-  local i=0
-
-  log "$desc"
-
-  # Run command in background, log all output into LOG.
-  set +e
-  ("$@" >>"$LOG" 2>&1) &
-  local pid=$!
-  set -e
-
-  while kill -0 "$pid" 2>/dev/null; do
-    i=$(( (i + 1) % 4 ))
-    printf "\r${BOLD}${CYN}[Info]${RST} ${BOLD}%s... %c${RST}" "$desc" "${spin:$i:1}"
-    sleep 0.12
-  done
-
-  wait "$pid"
-  local rc=$?
-
-  # Clear line
-  printf "\r\033[2K"
-
-  if [[ $rc -eq 0 ]]; then
-    ok "$desc"
-  else
-    err "$desc (rc=$rc)"
-  fi
-
-  return $rc
-}
-
 need_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
     return 1
@@ -152,72 +109,6 @@ EOF
   esac
 }
 
-install_hints_git() {
-  uname_s="$(uname -s)"
-  case "$uname_s" in
-    Darwin)
-      cat <<'EOF'
-Install git:
-  xcode-select --install
-(or via Homebrew)
-  brew install git
-EOF
-      ;;
-    Linux)
-      cat <<'EOF'
-Install git (Debian/Ubuntu):
-  sudo apt update
-  sudo apt install -y git
-EOF
-      ;;
-    *)
-      cat <<'EOF'
-Install git using your OS package manager.
-EOF
-      ;;
-  esac
-}
-
-# Ensure CMSIS_5 is present in platform/CMSIS_5, clone if missing
-ensure_cmsis5() {
-  local cmsis_dir="platform/CMSIS_5"
-
-  if [[ -d "$cmsis_dir" ]]; then
-    ok "CMSIS_5 present -> $cmsis_dir"
-    if [[ -d "$cmsis_dir/.git" ]]; then
-      (
-        cd "$cmsis_dir" 2>/dev/null || exit 0
-        git rev-parse --abbrev-ref HEAD 2>/dev/null | sed 's/^/CMSIS_5 branch: /' | tee -a "$LOG" >/dev/null || true
-        git rev-parse --short HEAD 2>/dev/null | sed 's/^/CMSIS_5 commit: /' | tee -a "$LOG" >/dev/null || true
-      ) || true
-    else
-      warn "CMSIS_5 directory exists but is not a git repo: $cmsis_dir"
-      warn "If you want auto-managed CMSIS_5, delete it and re-run ./run.sh"
-    fi
-    return 0
-  fi
-
-  log "CMSIS_5 not found. Bootstrapping into: $cmsis_dir"
-
-  if ! command -v git >/dev/null 2>&1; then
-    err "git not found (required to clone CMSIS_5)."
-    echo
-    install_hints_git | tee -a "$LOG"
-    exit 1
-  fi
-
-  mkdir -p "platform"
-
-  # Loading only (no %). Full git output goes to last_run.log.
-  if ! run_cmd_loading "Cloning CMSIS_5" \
-      git clone --progress "https://github.com/ARM-software/CMSIS_5.git" "$cmsis_dir"; then
-    err "Failed to clone CMSIS_5"
-    exit 1
-  fi
-
-  ok "Cloned CMSIS_5 -> $cmsis_dir"
-}
-
 # ---------- Port detection ----------
 list_ports() {
   uname_s="$(uname -s)"
@@ -288,9 +179,6 @@ pick_swiftc() {
 
 # ---------- Main ----------
 log "Log file: $LOG (always overwritten each run)"
-
-# ---------- CMSIS_5 bootstrap (platform/CMSIS_5) ----------
-ensure_cmsis5
 
 need_cmd make || { err "make not found"; echo; install_hints_toolchain | tee -a "$LOG"; exit 1; }
 need_cmd arm-none-eabi-gcc || { err "arm-none-eabi-gcc not found"; echo; install_hints_toolchain | tee -a "$LOG"; exit 1; }
