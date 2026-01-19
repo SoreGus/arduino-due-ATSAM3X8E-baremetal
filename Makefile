@@ -51,7 +51,9 @@ SWIFT_SRCS := $(SRC_DIR)/MMIO.swift \
               $(SRC_DIR)/main.swift \
               $(SRC_DIR)/ATSAM3X8E.swift \
               $(SRC_DIR)/SerialUART.swift \
-              $(SRC_DIR)/PIN.swift
+              $(SRC_DIR)/PIN.swift \
+              $(SRC_DIR)/ArduinoDue.swift \
+              $(SRC_DIR)/Board.swift
 
 STARTUP_S  := $(ARM_DIR)/startup.s
 LINKER_LD  := $(ARM_DIR)/linker.ld

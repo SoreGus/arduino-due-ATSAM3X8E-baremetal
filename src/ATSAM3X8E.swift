@@ -1,6 +1,6 @@
-// ATSAM3X8E.swift — Arduino Due (ATSAM3X8E / Cortex-M3)
+// ATSAM3X8E.swift — ATSAM3X8E (Arduino Due / Cortex-M3)
 // Memory map + register addresses + bitfields (NO methods, NO logic).
-// Depends on MMIO.swift defining: typealias U32 = UInt32 (ou similar)
+// Depends on MMIO.swift defining: typealias U32 = UInt32
 
 public enum ATSAM3X8E {
     // MARK: - Base addresses
@@ -17,7 +17,7 @@ public enum ATSAM3X8E {
     public static let EEFC0_BASE: U32 = 0x400E_0A00
     public static let EEFC1_BASE: U32 = 0x400E_0C00
 
-    // ✅ UART (used for "Programming Port" USB-serial on Arduino Due)
+    // UART (Arduino Due "Programming Port" serial)
     public static let UART_BASE: U32 = 0x400E_0800
 
     // Cortex-M3 SysTick (SCS)
@@ -51,7 +51,6 @@ public enum ATSAM3X8E {
         public static let SR_MOSCXTS:  U32 = U32(1) << 0
         public static let SR_LOCKA:    U32 = U32(1) << 1
         public static let SR_MCKRDY:   U32 = U32(1) << 3
-        // ✅ (hardening) crystal selected as MAINCK (some sequences wait this)
         public static let SR_MOSCSELS: U32 = U32(1) << 16
 
         // CKGR_MOR bits/fields
@@ -80,34 +79,32 @@ public enum ATSAM3X8E {
         public static let FMR_OFFSET: U32 = 0x0000
 
         // EEFC_FMR fields
-        // FWS typically bits [11:8] => mask 0xF << 8
         public static let FMR_FWS_MASK:  U32 = 0xF << 8
         public static let FMR_FWS_SHIFT: U32 = 8
     }
 
-    // MARK: - PIO (Parallel I/O) offsets (basic GPIO)
+    // MARK: - PIO (GPIO) offsets
 
     public enum PIO {
-        public static let PER_OFFSET:  U32 = 0x0000 // PIO Enable Register
-        public static let OER_OFFSET:  U32 = 0x0010 // Output Enable Register
-        public static let ODR_OFFSET:  U32 = 0x0014 // Output Disable Register
-        public static let SODR_OFFSET: U32 = 0x0030 // Set Output Data Register
-        public static let CODR_OFFSET: U32 = 0x0034 // Clear Output Data Register
-        public static let PDSR_OFFSET: U32 = 0x003C // Pin Data Status Register (read)
+        public static let PER_OFFSET:  U32 = 0x0000 // PIO Enable
+        public static let OER_OFFSET:  U32 = 0x0010 // Output Enable
+        public static let ODR_OFFSET:  U32 = 0x0014 // Output Disable
+        public static let SODR_OFFSET: U32 = 0x0030 // Set Output Data
+        public static let CODR_OFFSET: U32 = 0x0034 // Clear Output Data
+        public static let PDSR_OFFSET: U32 = 0x003C // Pin Data Status (read)
     }
 
-    // MARK: - PIO (extra offsets for peripheral mux)
+    // MARK: - PIO mux offsets
 
     public enum PIOX {
-        public static let PDR_OFFSET:  U32 = 0x0004 // PIO Disable Register (hand over to peripheral)
-        public static let ABSR_OFFSET: U32 = 0x0070 // Peripheral AB Select Register
-        public static let PUER_OFFSET: U32 = 0x0064 // Pull-up Enable Register
+        public static let PDR_OFFSET:  U32 = 0x0004 // PIO Disable (hand over to peripheral)
+        public static let ABSR_OFFSET: U32 = 0x0070 // Peripheral AB Select
+        public static let PUER_OFFSET: U32 = 0x0064 // Pull-up Enable
     }
 
-    // MARK: - UART (Programming Port serial) — register addresses + bitfields
+    // MARK: - UART
 
     public enum UART {
-        // Registers (absolute addresses)
         public static let CR:   U32 = ATSAM3X8E.UART_BASE + 0x0000
         public static let MR:   U32 = ATSAM3X8E.UART_BASE + 0x0004
         public static let IER:  U32 = ATSAM3X8E.UART_BASE + 0x0008
@@ -133,7 +130,7 @@ public enum ATSAM3X8E {
         public static let SR_FRAME: U32 = U32(1) << 6
         public static let SR_PARE:  U32 = U32(1) << 7
 
-        // MR fields (8N1, normal channel mode)
+        // MR fields
         public static let MR_PAR_SHIFT: U32 = 9
         public static let MR_PAR_MASK:  U32 = 0x7 << MR_PAR_SHIFT
         public static let MR_PAR_NONE:  U32 = 0x4 << MR_PAR_SHIFT
@@ -143,10 +140,9 @@ public enum ATSAM3X8E {
         public static let MR_CHMODE_NORMAL: U32 = 0x0 << MR_CHMODE_SHIFT
     }
 
-    // MARK: - UART pin mapping (PA8/PA9) bitmasks
+    // MARK: - UART pins (PA8/PA9)
 
     public enum PIOA_UART {
-        // UART uses PA8 (URXD) and PA9 (UTXD) on SAM3X8E.
         public static let RX_PIN: U32 = 8
         public static let TX_PIN: U32 = 9
 
@@ -156,51 +152,18 @@ public enum ATSAM3X8E {
         public static let MASK: U32 = RX_MASK | TX_MASK
     }
 
-    // MARK: - WDT (Watchdog Timer)
+    // MARK: - WDT
 
     public enum WDT {
         public static let MR: U32 = ATSAM3X8E.WDT_BASE + 0x0004
         public static let WDT_MR_WDDIS: U32 = U32(1) << 15
     }
 
-    // MARK: - SysTick (Cortex-M3)
+    // MARK: - SysTick bits
 
     public enum SysTick {
         public static let CSR_ENABLE:  U32 = U32(1) << 0
         public static let CSR_TICKINT: U32 = U32(1) << 1
         public static let CSR_CLKSRC:  U32 = U32(1) << 2
     }
-
-    @inline(__always)
-    static public func initBoard() -> (ok: Bool, serial: SerialUART, timer: Timer) {
-        // Disable watchdog
-        write32(ATSAM3X8E.WDT.MR, ATSAM3X8E.WDT.WDT_MR_WDDIS)
-
-        // Clock (84MHz). Fallback if it fails.
-        let ok = DueClock.init84MHz()
-        let mck: U32 = ok ? 84_000_000 : 4_000_000
-        let cpuHz: U32 = ok ? 84_000_000 : 4_000_000
-
-        // UART + banner
-        let serial = SerialUART(mckHz: mck)
-        serial.beginWithBootBanner(115_200, clockOk: ok)
-
-        // SysTick
-        bm_enable_irq()
-        let timer = Timer(cpuHz: cpuHz)
-        timer.startTick1ms()
-
-        return (ok, serial, timer)
-    }
-}
-
-// MARK: - Board mapping (Arduino Due)
-
-public enum ArduinoDue {
-    // LED "L" (D13) is PB27 on Arduino Due.
-    public static let LED_PIN:  U32 = 27
-    public static let LED_MASK: U32 = U32(1) << LED_PIN
-
-    public static let LED_PIO_BASE: U32 = ATSAM3X8E.PIOB_BASE
-    public static let LED_PIO_ID:   U32 = ATSAM3X8E.ID.PIOB
 }
