@@ -47,3 +47,19 @@ public final class Timer {
         }
     }
 }
+
+extension Timer {
+    @inline(__always)
+    public func sleepUntil(_ deadline: U32) {
+        // while now < deadline (safe with wrap-around)
+        while ((millis() &- deadline) & 0x8000_0000) != 0 {
+            bm_nop()
+        }
+    }
+
+    @inline(__always)
+    public func sleepFor(ms: U32) {
+        let d = millis() &+ ms
+        sleepUntil(d)
+    }
+}

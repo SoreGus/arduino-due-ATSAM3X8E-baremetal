@@ -49,7 +49,8 @@ SWIFT_SRCS := $(SRC_DIR)/MMIO.swift \
               $(SRC_DIR)/Clock.swift \
               $(SRC_DIR)/Timer.swift \
               $(SRC_DIR)/main.swift \
-              $(SRC_DIR)/ATSAM3X8E.swift
+              $(SRC_DIR)/ATSAM3X8E.swift \
+              $(SRC_DIR)/SerialUART.swift
 
 STARTUP_S  := $(ARM_DIR)/startup.s
 LINKER_LD  := $(ARM_DIR)/linker.ld

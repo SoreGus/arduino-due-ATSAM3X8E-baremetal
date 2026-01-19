@@ -1,40 +1,50 @@
-// main.swift — Blink PB27/D13 using SysTick Timer (Arduino Due)
-
 @_cdecl("main")
 public func main() -> Never {
-    // Disable watchdog
     write32(ATSAM3X8E.WDT.MR, ATSAM3X8E.WDT.WDT_MR_WDDIS)
 
-    // ✅ Set clock ASAP (so everything after is “normal speed”)
     let ok = DueClock.init84MHz()
-    if !ok {
-        // If clock init failed, blink slow forever
-        write32(ATSAM3X8E.PMC.PCER0, U32(1) << ArduinoDue.LED_PIO_ID)
-        write32(ArduinoDue.LED_PIO_BASE + ATSAM3X8E.PIO.PER_OFFSET, ArduinoDue.LED_MASK)
-        write32(ArduinoDue.LED_PIO_BASE + ATSAM3X8E.PIO.OER_OFFSET, ArduinoDue.LED_MASK)
+    let mck: U32 = ok ? 84_000_000 : 4_000_000
+    let cpuHz: U32 = ok ? 84_000_000 : 4_000_000
 
-        while true {
-            write32(ArduinoDue.LED_PIO_BASE + ATSAM3X8E.PIO.SODR_OFFSET, ArduinoDue.LED_MASK)
-            for _ in 0..<2_000_000 { bm_nop() }
-            write32(ArduinoDue.LED_PIO_BASE + ATSAM3X8E.PIO.CODR_OFFSET, ArduinoDue.LED_MASK)
-            for _ in 0..<2_000_000 { bm_nop() }
-        }
-    }
+    let serial = SerialUART(mckHz: mck)
+    serial.begin(115_200)
+    serial.writeString("BOOT\r\nclock_ok=")
+    serial.writeString(ok ? "1" : "0")
+    serial.writeString("\r\n")
 
-    // Enable PIOB clock + PB27 output
     write32(ATSAM3X8E.PMC.PCER0, U32(1) << ArduinoDue.LED_PIO_ID)
     write32(ArduinoDue.LED_PIO_BASE + ATSAM3X8E.PIO.PER_OFFSET, ArduinoDue.LED_MASK)
     write32(ArduinoDue.LED_PIO_BASE + ATSAM3X8E.PIO.OER_OFFSET, ArduinoDue.LED_MASK)
 
     bm_enable_irq()
-
-    let timer = Timer(cpuHz: 84_000_000)
+    let timer = Timer(cpuHz: cpuHz)
     timer.startTick1ms()
 
+    // parâmetros
+    let onMs: U32 = 1000
+    let offMs: U32 = 1000
+    let period: U32 = onMs &+ offMs
+
+    // alinha no próximo múltiplo de 1000ms (opcional)
+    var t0 = timer.millis()
+    var next = (t0 / 1000) * 1000
+    next &+= 1000
+
     while true {
+        // ===== início do ciclo (LED ON) =====
+        timer.sleepUntil(next)
+
+        serial.writeString("tick=")
+        serial.writeHex32(next)
+        serial.writeString("\r\n")
+
         write32(ArduinoDue.LED_PIO_BASE + ATSAM3X8E.PIO.SODR_OFFSET, ArduinoDue.LED_MASK)
-        timer.sleep(ms: 1000)
+
+        // ===== LED OFF depois de 1000ms =====
+        timer.sleepUntil(next &+ onMs)
         write32(ArduinoDue.LED_PIO_BASE + ATSAM3X8E.PIO.CODR_OFFSET, ArduinoDue.LED_MASK)
-        timer.sleep(ms: 1000)
+
+        // ===== próximo ciclo =====
+        next &+= period
     }
 }
