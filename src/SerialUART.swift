@@ -16,6 +16,7 @@ public final class SerialUART {
         // Switch PA8/PA9 to Peripheral A (UART), disable PIO control
         let pioa = ATSAM3X8E.PIOA_BASE
 
+        // Hand over PA8/PA9 to peripheral (disable PIO control)
         write32(pioa + ATSAM3X8E.PIOX.PDR_OFFSET, ATSAM3X8E.PIOA_UART.MASK)
 
         // Select Peripheral A: ABSR bit=0 => A
@@ -36,11 +37,21 @@ public final class SerialUART {
         write32(ATSAM3X8E.UART.MR, mr)
 
         // Baud: CD = MCK / (16 * baud)
+        // (Use U32 math only; keep it tiny)
         let cd = mckHz / (16 * baud)
         write32(ATSAM3X8E.UART.BRGR, cd)
 
         // Enable TX/RX
         write32(ATSAM3X8E.UART.CR, ATSAM3X8E.UART.CR_RXEN | ATSAM3X8E.UART.CR_TXEN)
+    }
+
+    // Init + minimal banner (no String interpolation)
+    @inline(__always)
+    public func beginWithBootBanner(_ baud: U32, clockOk: Bool) {
+        begin(baud)
+        writeString("BOOT\r\nclock_ok=")
+        writeString(clockOk ? "1" : "0")
+        writeString("\r\n")
     }
 
     @inline(__always)

@@ -1,50 +1,56 @@
-@_cdecl("main")
-public func main() -> Never {
+// main.swift — Blink + UART (Arduino Due "Programming Port") using PIN.swift
+// LED: 1000ms ON / 1000ms OFF (sem drift) + print no início do ciclo.
+
+@inline(__always)
+private func initBoard() -> (ok: Bool, serial: SerialUART, timer: Timer) {
+    // Disable watchdog
     write32(ATSAM3X8E.WDT.MR, ATSAM3X8E.WDT.WDT_MR_WDDIS)
 
+    // Clock (84MHz). Fallback if it fails.
     let ok = DueClock.init84MHz()
     let mck: U32 = ok ? 84_000_000 : 4_000_000
     let cpuHz: U32 = ok ? 84_000_000 : 4_000_000
 
+    // UART + banner
     let serial = SerialUART(mckHz: mck)
-    serial.begin(115_200)
-    serial.writeString("BOOT\r\nclock_ok=")
-    serial.writeString(ok ? "1" : "0")
-    serial.writeString("\r\n")
+    serial.beginWithBootBanner(115_200, clockOk: ok)
 
-    write32(ATSAM3X8E.PMC.PCER0, U32(1) << ArduinoDue.LED_PIO_ID)
-    write32(ArduinoDue.LED_PIO_BASE + ATSAM3X8E.PIO.PER_OFFSET, ArduinoDue.LED_MASK)
-    write32(ArduinoDue.LED_PIO_BASE + ATSAM3X8E.PIO.OER_OFFSET, ArduinoDue.LED_MASK)
-
+    // SysTick
     bm_enable_irq()
     let timer = Timer(cpuHz: cpuHz)
     timer.startTick1ms()
 
-    // parâmetros
+    return (ok, serial, timer)
+}
+
+@_cdecl("main")
+public func main() -> Never {
+    let (_, serial, timer) = initBoard()
+
+    let led = PIN(27) // Arduino Due LED "L" (D13) = PB27
+    led.output()
+
     let onMs: U32 = 1000
     let offMs: U32 = 1000
     let period: U32 = onMs &+ offMs
 
-    // alinha no próximo múltiplo de 1000ms (opcional)
-    var t0 = timer.millis()
-    var next = (t0 / 1000) * 1000
+    // Align to the next 1000ms boundary (nice logs)
+    let now = timer.millis()
+    var next = (now / 1000) * 1000
     next &+= 1000
 
     while true {
-        // ===== início do ciclo (LED ON) =====
         timer.sleepUntil(next)
 
         serial.writeString("tick=")
         serial.writeHex32(next)
         serial.writeString("\r\n")
 
-        write32(ArduinoDue.LED_PIO_BASE + ATSAM3X8E.PIO.SODR_OFFSET, ArduinoDue.LED_MASK)
+        led.on()
 
-        // ===== LED OFF depois de 1000ms =====
         timer.sleepUntil(next &+ onMs)
-        write32(ArduinoDue.LED_PIO_BASE + ATSAM3X8E.PIO.CODR_OFFSET, ArduinoDue.LED_MASK)
+        led.off()
 
-        // ===== próximo ciclo =====
         next &+= period
     }
 }

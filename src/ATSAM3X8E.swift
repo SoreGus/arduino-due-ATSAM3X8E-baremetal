@@ -90,8 +90,10 @@ public enum ATSAM3X8E {
     public enum PIO {
         public static let PER_OFFSET:  U32 = 0x0000 // PIO Enable Register
         public static let OER_OFFSET:  U32 = 0x0010 // Output Enable Register
+        public static let ODR_OFFSET:  U32 = 0x0014 // Output Disable Register
         public static let SODR_OFFSET: U32 = 0x0030 // Set Output Data Register
         public static let CODR_OFFSET: U32 = 0x0034 // Clear Output Data Register
+        public static let PDSR_OFFSET: U32 = 0x003C // Pin Data Status Register (read)
     }
 
     // MARK: - PIO (extra offsets for peripheral mux)
