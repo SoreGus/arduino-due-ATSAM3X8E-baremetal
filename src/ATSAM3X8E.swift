@@ -170,6 +170,28 @@ public enum ATSAM3X8E {
         public static let CSR_TICKINT: U32 = U32(1) << 1
         public static let CSR_CLKSRC:  U32 = U32(1) << 2
     }
+
+    @inline(__always)
+    static public func initBoard() -> (ok: Bool, serial: SerialUART, timer: Timer) {
+        // Disable watchdog
+        write32(ATSAM3X8E.WDT.MR, ATSAM3X8E.WDT.WDT_MR_WDDIS)
+
+        // Clock (84MHz). Fallback if it fails.
+        let ok = DueClock.init84MHz()
+        let mck: U32 = ok ? 84_000_000 : 4_000_000
+        let cpuHz: U32 = ok ? 84_000_000 : 4_000_000
+
+        // UART + banner
+        let serial = SerialUART(mckHz: mck)
+        serial.beginWithBootBanner(115_200, clockOk: ok)
+
+        // SysTick
+        bm_enable_irq()
+        let timer = Timer(cpuHz: cpuHz)
+        timer.startTick1ms()
+
+        return (ok, serial, timer)
+    }
 }
 
 // MARK: - Board mapping (Arduino Due)
