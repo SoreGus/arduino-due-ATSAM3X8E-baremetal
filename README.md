@@ -14,7 +14,9 @@ What’s included:
 - Swift compiled in **Embedded Swift** mode
 - final link with **ARM GNU** toolchain
 - flashing via **BOSSA** (`bossac`) using the Due bootloader
-- **real 84 MHz clock init** (PLLA → MCK) and **SysTick 1ms timer**
+- **real 84 MHz clock init** (PLLA → MCK)
+- **SysTick 1 ms timer** with **deadline‑based scheduling (no drift)**
+- **UART serial output** via the Arduino Due **Programming Port**
 
 ---
 
@@ -61,14 +63,18 @@ public func main() -> Never
 ## Repository Layout
 
 - `main.swift`  
-  Minimal blink example using **PIOB PB27** + **SysTick Timer**.
+  Blink + UART example using **PIOB PB27** and a **deadline‑aligned 1 s loop** (no drift).
 
 - `Timer.swift`  
-  SysTick configured for **1 ms tick** and a busy‑wait `sleep(ms:)`.
+  SysTick configured for **1 ms tick**, plus helpers used for absolute‑time scheduling.
 
 - `Clock.swift`  
   Initializes **84 MHz** by enabling the crystal oscillator, configuring **PLLA**, and
   switching **MCK** to PLLA. Uses timeouts to avoid silent hangs.
+
+- `SerialUART.swift`  
+  Minimal UART driver for the **Programming Port** (no printf, no division, no heap).
+  Supports byte output and HEX printing without pulling heavy runtime symbols.
 
 - `MMIO.swift`  
   Low‑level MMIO helpers and small barrier/IRQ functions exposed from `support.c`.
@@ -90,8 +96,12 @@ public func main() -> Never
   converts → `firmware.bin`.
 
 - `run.sh`  
-  Builds + auto‑detects serial port + triggers bootloader (1200 bps touch) + uploads
-  using `bossac`. Always overwrites `last_run.log` and prints colored status lines.
+  Builds and uploads the firmware using `bossac`. Always overwrites `last_run.log`
+  and prints colored status lines.
+
+- `serial.sh`  
+  Opens a serial console automatically using **picocom** (preferred) or **screen**,
+  with auto‑port detection.
 
 ---
 
@@ -109,6 +119,10 @@ Recommended via **swiftly**.
 ### Uploader
 - `bossac` (BOSSA)
 
+### Serial Monitor (recommended)
+- `picocom` (preferred)
+- fallback: `screen`
+
 ---
 
 ## Installation
@@ -116,7 +130,7 @@ Recommended via **swiftly**.
 ### macOS
 
 ```bash
-brew install make bossa
+brew install make bossa picocom
 brew install --cask gcc-arm-embedded
 brew install swiftly
 
@@ -135,14 +149,10 @@ swiftc --version
 
 ```bash
 sudo apt update
-sudo apt install -y \
-  build-essential \
-  gcc-arm-none-eabi \
-  binutils-arm-none-eabi \
-  bossac
+sudo apt install -y   build-essential   gcc-arm-none-eabi   binutils-arm-none-eabi   bossac   picocom
 ```
 
-Install swiftly and a snapshot toolchain according to the official repo:
+Install swiftly and a snapshot toolchain according to:
 https://github.com/apple/swiftly
 
 ---
@@ -153,7 +163,7 @@ Running the build produces:
 
 - `firmware.elf` — linked ELF file
 - `firmware.bin` — raw binary for flashing
-- `firmware.map` — linker map (useful for inspection)
+- `firmware.map` — linker map
 - `last_run.log` — last run log (overwritten each run)
 
 Clean:
@@ -176,24 +186,38 @@ The script will:
 1. verify required tools
 2. compile Swift + assembly
 3. link using ARM GNU tools
-4. detect the serial port automatically
-5. trigger the 1200‑bps bootloader reset
-6. upload the firmware using `bossac`
+4. upload the firmware using `bossac`
 
 ---
 
-## Example Behavior
+## Serial Console
 
-Default firmware blinks:
+After flashing:
 
-- LED: **PB27**
-- Board LED: Arduino Due **“L” (D13)**
+```bash
+./serial.sh
+```
 
-This confirms:
-- Swift code is executing
-- MMIO writes are correct
-- startup + linker + minimal runtime are working
-- SysTick tick + clock config are functional
+This opens a serial monitor at **115200 baud** with auto‑detected port.
+Exit `picocom` with **Ctrl+A, Ctrl+X**.
+
+---
+
+## Example Output
+
+```
+BOOT
+clock_ok=1
+tick=0x000003E8
+tick=0x000007D0
+tick=0x00000BB8
+...
+```
+
+Ticks increment **exactly by 1000 ms**, demonstrating:
+- correct 84 MHz clock
+- correct SysTick configuration
+- deadline‑based scheduling without drift
 
 ---
 
@@ -205,35 +229,37 @@ This confirms:
 - **PLLA** to 84 MHz (12 MHz × (MULA+1) / DIVA)
 - switches **MCK** to PLLA and waits for `MCKRDY`
 
-After that, SysTick uses `CLKSRC=CPU clock` so:
+SysTick uses `CLKSRC = CPU clock`, so:
 
 ```swift
 reload = cpuHz / 1000 - 1
 ```
 
-becomes a real 1 ms tick when `cpuHz = 84_000_000`.
+produces a **true 1 ms tick**.
+
+### Deadline‑based timing (no drift)
+Periodic tasks are scheduled using **absolute deadlines**, not chained delays.
+This avoids cumulative error caused by serial I/O or other work inside the loop.
 
 ### Volatile MMIO
-For robust polling loops (waiting on `PMC_SR` flags, etc.), reads/writes must not be
-optimized away. This repo provides `bm_read32/bm_write32` in `support.c` using
-`volatile` pointers. `MMIO.swift` should route `read32/write32` through those helpers.
+Polling registers requires volatile access. This repo provides
+`bm_read32` / `bm_write32` in `support.c` and routes Swift MMIO through them
+to prevent incorrect compiler optimizations.
 
 ---
 
 ## Troubleshooting
 
-- **LED stays ON or OFF forever**
-  - Confirm you are flashing via the **Programming Port**.
-  - Confirm `startup.s` installs VTOR and that SysTick vector points to
-    `SysTick_Handler`.
+- **No serial output**
+  - Ensure you are connected to the **Programming Port**.
+  - Close any other serial monitor before opening `serial.sh`.
 
-- **SysTick timing wrong / too slow / too fast**
-  - Ensure `Clock.init84MHz()` runs successfully before starting SysTick.
-  - Ensure SysTick `CSR_CLKSRC` is set (CPU clock, not CPU/8).
+- **LED stays ON or OFF**
+  - Confirm PB27 clock is enabled (`PMC_PCER0`).
+  - Confirm `startup.s` installs VTOR correctly.
 
-- **Build errors: missing symbols like `bm_enable_irq`**
-  - Ensure `MMIO.swift` declares the `_silgen_name` functions, and `support.c`
-    defines them with `__attribute__((used))`.
+- **Timing drift**
+  - Ensure you are using deadline‑based scheduling, not `sleep(ms:)` in a loop.
 
 ---
 
