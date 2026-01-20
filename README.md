@@ -1,3 +1,4 @@
+
 # ATSAM3X8E Bare Metal (Arduino Due) — Embedded Swift
 
 Bare‑metal firmware project for the **ATSAM3X8E** microcontroller (ARM Cortex‑M3),
@@ -7,16 +8,25 @@ This repository demonstrates that **Swift can be used as a systems / embedded la
 compiling directly to ARM machine code and running **without an OS, without Arduino Core,
 without CMSIS, and without any HAL**.
 
-What’s included:
-- custom linker script (`linker.ld`)
-- custom startup + vector table (`startup.s`)
-- a minimal C support layer (`support.c`)
+---
+
+## What’s Included
+
+- Custom linker script (`linker.ld`)
+- Custom startup + vector table (`startup.s`)
+- Minimal C support layer (`support.c`)
 - Swift compiled in **Embedded Swift** mode
-- final link with **ARM GNU** toolchain
-- flashing via **BOSSA** (`bossac`) using the Due bootloader
-- **real 84 MHz clock init** (PLLA → MCK)
-- **SysTick 1 ms timer** with **deadline‑based scheduling (no drift)**
-- **UART serial output** via the Arduino Due **Programming Port**
+- Final link with **ARM GNU** toolchain
+- Flashing via **BOSSA** (`bossac`) using the Due bootloader
+- **84 MHz real clock initialization** (PLLA → MCK)
+- **SysTick 1 ms timer** with deadline‑based scheduling (no drift)
+- **UART serial output** via the Arduino Due Programming Port
+- **I2C (TWI) driver written from scratch**, supporting:
+  - Master mode
+  - Slave mode
+  - Polling‑based operation (no interrupts)
+  - Compatibility with Arduino `Wire` protocol
+  - Tested against **Arduino Giga** as I2C Master
 
 ---
 
@@ -29,142 +39,172 @@ What’s included:
 - SRAM: **96 KB**
 - Boot ROM: **SAM‑BA**
 - Board: **Arduino Due**
-- LED example: **PB27 (Arduino pin D13 / LED “L”)**
+- I2C Pins (Wire):
+  - SDA: **PB12** (Arduino pin 20)
+  - SCL: **PB13** (Arduino pin 21)
 
 ---
 
-## What “Embedded Swift” Means Here
+## Embedded Swift Explained
 
-This project uses Swift as a **language frontend** in a freestanding environment.
+This project uses Swift as a **freestanding language frontend**.
 
-✅ Swift compiles to ARM object code (`.o`)  
-✅ Code runs **bare metal**  
-✅ No OS  
-✅ No Arduino framework  
-✅ No CMSIS / HAL  
-✅ No Foundation  
-✅ No libc required  
+- No OS
+- No Arduino framework
+- No CMSIS
+- No HAL
+- No Foundation
+- No libc
 
-The entry point is a C‑ABI symbol exported from Swift:
+Swift is compiled to ARM object files and linked like C.
+
+The entry point is:
 
 ```swift
 @_cdecl("main")
 public func main() -> Never
 ```
 
-`startup.s` calls `main()` after:
-- copying `.data` from Flash → RAM
-- zeroing `.bss`
-- setting `SCB->VTOR` to the local vector table
-- enabling interrupts
+The startup code performs:
+- `.data` copy (Flash → RAM)
+- `.bss` zero
+- VTOR setup
+- SysTick configuration
+- Jump to `main()`
+
+---
+
+## I2C (TWI) Implementation
+
+This project contains a **fully custom I2C (TWI) implementation** written directly
+against the ATSAM3X8E registers.
+
+### Design Goals
+
+- Arduino `Wire`‑like API
+- Support **Master and Slave**
+- **Polling‑based**, no interrupts
+- Deterministic timing (safe for Embedded Swift)
+- No DMA / PDC usage
+- No dependencies on ArduinoCore‑sam
+
+### Supported Features
+
+- `begin()` — master mode
+- `begin(address)` — slave mode
+- `onReceive {}` callback (slave)
+- `onRequest {}` callback (slave)
+- `beginTransmission()` / `write()` / `endTransmission()`
+- `requestFrom()` / `available()` / `read()`
+
+### Slave Design (Important)
+
+- The slave is **polling‑based**
+- `i2c.poll()` **must be called continuously**
+- **Do not print inside callbacks**
+- Callbacks only update state
+- UART output happens in the main loop
+
+This avoids timing violations and missed `TXRDY / RXRDY` windows.
+
+### Tested Setup
+
+- **Arduino Due**: I2C Slave (this project)
+- **Arduino Giga**: I2C Master (Arduino `Wire` library)
+- Speed: 100 kHz and 50 kHz tested
+- Address: `0x42` (7‑bit)
+
+Data exchange verified in both directions.
 
 ---
 
 ## Repository Layout
 
 - `main.swift`  
-  Blink + UART example using **PIOB PB27** and a **deadline‑aligned 1 s loop** (no drift).
+  Example firmware running the Due as **I2C Slave**, responding to an Arduino Giga Master.
+
+- `I2C.swift`  
+  Full TWI driver (Master + Slave), register‑level, polling‑based.
 
 - `Timer.swift`  
-  SysTick configured for **1 ms tick**, plus helpers used for absolute‑time scheduling.
+  SysTick driver (1 ms tick) with deadline‑aligned scheduling.
 
 - `Clock.swift`  
-  Initializes **84 MHz** by enabling the crystal oscillator, configuring **PLLA**, and
-  switching **MCK** to PLLA. Uses timeouts to avoid silent hangs.
+  84 MHz clock initialization via PLLA.
 
 - `SerialUART.swift`  
-  Minimal UART driver for the **Programming Port** (no printf, no division, no heap).
-  Supports byte output and HEX printing without pulling heavy runtime symbols.
+  Minimal UART driver for the Programming Port.
 
 - `MMIO.swift`  
-  Low‑level MMIO helpers and small barrier/IRQ functions exposed from `support.c`.
+  Volatile MMIO helpers bridged from C.
 
 - `startup.s`  
-  Vector table + Reset handler. Installs VTOR and wires SysTick to `SysTick_Handler`.
+  Vector table + reset handler.
 
 - `linker.ld`  
-  Memory map for ATSAM3X8E (Flash @ `0x00080000`, SRAM @ `0x20070000`) and required
-  symbols for startup + minimal runtime.
+  Memory map and runtime symbols.
 
 - `support.c`  
-  Minimal functions required by Embedded Swift (stack guard, allocator stub, memclr,
-  small PRNG), plus CPU helpers (`nop`, `cpsie/cpsid`, `dsb/isb`) and **volatile MMIO**
-  implementations.
+  Minimal C runtime glue required by Embedded Swift.
 
 - `Makefile`  
-  Builds: `startup.o`, `support.o`, Swift module → `swift.o`, links → `firmware.elf`,
-  converts → `firmware.bin`.
+  Full build and link pipeline.
 
 - `run.sh`  
-  Builds and uploads the firmware using `bossac`. Always overwrites `last_run.log`
-  and prints colored status lines.
+  Build + flash script using `bossac`.
 
 - `serial.sh`  
-  Opens a serial console automatically using **picocom** (preferred) or **screen**,
-  with auto‑port detection.
+  Interactive serial monitor with auto‑port detection.
+
+---
+
+## Example I2C Slave Output (Due)
+
+```
+DUE I2C SLAVE START
+I2C slave init OK
+rxCount=1 txCount=2 counter=0x5D
+rxCount=2 txCount=4 counter=0x5E
+rxCount=3 txCount=6 counter=0x5F
+...
+```
+
+## Example I2C Master Output (Giga)
+
+```
+WRITE -> 1E 2E 3E
+READ  <- 3E 3F 40 41
+WRITE -> 1F 2F 3F
+READ  <- 3F 40 41 42
+```
 
 ---
 
 ## Requirements
 
-### Toolchain (build/link)
+### Toolchain
 - `arm-none-eabi-gcc`
 - `arm-none-eabi-objcopy`
 - `make`
 
-### Embedded Swift Toolchain
-You need a Swift snapshot toolchain that supports **Embedded Swift**.
-Recommended via **swiftly**.
+### Swift
+- Swift snapshot with **Embedded Swift**
+- Recommended via **swiftly**
 
-### Uploader
-- `bossac` (BOSSA)
+### Upload
+- `bossac`
 
-### Serial Monitor (recommended)
+### Serial
 - `picocom` (preferred)
-- fallback: `screen`
+- `screen` (fallback)
 
 ---
 
-## Installation
-
-### macOS
+## Build
 
 ```bash
-brew install make bossa picocom
-brew install --cask gcc-arm-embedded
-brew install swiftly
-
-swiftly init
-swiftly install main-snapshot
-swiftly use main-snapshot
+make
 ```
-
-Open a new shell and confirm:
-
-```bash
-swiftc --version
-```
-
-### Linux (Debian / Ubuntu)
-
-```bash
-sudo apt update
-sudo apt install -y   build-essential   gcc-arm-none-eabi   binutils-arm-none-eabi   bossac   picocom
-```
-
-Install swiftly and a snapshot toolchain according to:
-https://github.com/apple/swiftly
-
----
-
-## Build Outputs
-
-Running the build produces:
-
-- `firmware.elf` — linked ELF file
-- `firmware.bin` — raw binary for flashing
-- `firmware.map` — linker map
-- `last_run.log` — last run log (overwritten each run)
 
 Clean:
 
@@ -174,92 +214,21 @@ make clean
 
 ---
 
-## Upload (Arduino Due)
+## Flash (Arduino Due)
 
-⚠️ Use the **Programming Port**, not the Native USB port.
+⚠️ Use the **Programming Port**.
 
 ```bash
 ./run.sh
 ```
 
-The script will:
-1. verify required tools
-2. compile Swift + assembly
-3. link using ARM GNU tools
-4. upload the firmware using `bossac`
-
 ---
 
-## Serial Console
-
-After flashing:
+## Serial Monitor
 
 ```bash
 ./serial.sh
 ```
-
-This opens a serial monitor at **115200 baud** with auto‑detected port.
-Exit `picocom` with **Ctrl+A, Ctrl+X**.
-
----
-
-## Example Output
-
-```
-BOOT
-clock_ok=1
-tick=0x000003E8
-tick=0x000007D0
-tick=0x00000BB8
-...
-```
-
-Ticks increment **exactly by 1000 ms**, demonstrating:
-- correct 84 MHz clock
-- correct SysTick configuration
-- deadline‑based scheduling without drift
-
----
-
-## Clock + Timer Notes (Important)
-
-### Real 84 MHz clock (no “fake delays”)
-`Clock.swift` configures:
-- crystal oscillator (MAINCK)
-- **PLLA** to 84 MHz (12 MHz × (MULA+1) / DIVA)
-- switches **MCK** to PLLA and waits for `MCKRDY`
-
-SysTick uses `CLKSRC = CPU clock`, so:
-
-```swift
-reload = cpuHz / 1000 - 1
-```
-
-produces a **true 1 ms tick**.
-
-### Deadline‑based timing (no drift)
-Periodic tasks are scheduled using **absolute deadlines**, not chained delays.
-This avoids cumulative error caused by serial I/O or other work inside the loop.
-
-### Volatile MMIO
-Polling registers requires volatile access. This repo provides
-`bm_read32` / `bm_write32` in `support.c` and routes Swift MMIO through them
-to prevent incorrect compiler optimizations.
-
----
-
-## Troubleshooting
-
-- **No serial output**
-  - Ensure you are connected to the **Programming Port**.
-  - Close any other serial monitor before opening `serial.sh`.
-
-- **LED stays ON or OFF**
-  - Confirm PB27 clock is enabled (`PMC_PCER0`).
-  - Confirm `startup.s` installs VTOR correctly.
-
-- **Timing drift**
-  - Ensure you are using deadline‑based scheduling, not `sleep(ms:)` in a loop.
 
 ---
 

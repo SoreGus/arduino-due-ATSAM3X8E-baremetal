@@ -1,7 +1,4 @@
-// Board.swift — Arduino Due bring-up (clock + UART + SysTick + I2C)
-// Keeps main.swift clean.
-// Depends on: Clock.swift (DueClock), Timer.swift, SerialUART.swift, I2C.swift,
-//            MMIO.swift, ATSAM3X8E.swift, ArduinoDue.swift.
+// Board.swift — clock + UART + SysTick + (I2C object only; main decides master/slave)
 
 public enum Board {
     public struct Context {
@@ -16,8 +13,7 @@ public enum Board {
     @inline(__always)
     public static func initBoard(
         baud: U32 = 115_200,
-        printBootBanner: Bool = true,
-        i2cClockHz: U32 = 100_000
+        printBootBanner: Bool = true
     ) -> Context {
         // 1) Disable watchdog
         write32(ATSAM3X8E.WDT.MR, ATSAM3X8E.WDT.WDT_MR_WDDIS)
@@ -37,16 +33,17 @@ public enum Board {
             serial.writeString("\r\n")
         }
 
-        // 4) SysTick (1ms) — configure first, then enable IRQ
+        // 4) SysTick (1ms)
+        // NOTE: This does NOT require global IRQs if your Timer implementation
+        // polls COUNTFLAG. If your Timer relies on SysTick IRQ, enable it in main.
         let timer = Timer(cpuHz: cpu)
         timer.startTick1ms()
-        bm_enable_irq()
 
-        // 5) I2C (Master) — default bus = ArduinoDue.Wire (pins 20/21 = TWI1)
-        // Clock can be changed later via setClock(...)
+        // IMPORTANT: DO NOT enable global IRQs here for polling-based I2C.
+        // bm_enable_irq()
+
+        // 5) I2C object only — main decides begin() vs begin(address)
         let i2c = I2C(mckHz: mck, timer: timer, bus: .wire)
-        i2c.begin()
-        i2c.setClock(i2cClockHz)
 
         return Context(
             clockOk: ok,
