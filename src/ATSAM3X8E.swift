@@ -34,16 +34,16 @@ public enum ATSAM3X8E {
     public enum ID {
         public static let UART: U32 = 8
 
+        // ✅ IDs corretos (SAM3X8E)
         public static let PIOA: U32 = 11
-        public static let PIOB: U32 = 13
-        public static let PIOC: U32 = 14
-        public static let PIOD: U32 = 15
+        public static let PIOB: U32 = 12
+        public static let PIOC: U32 = 13
+        public static let PIOD: U32 = 14
 
         // TWI/I2C
         public static let TWI0: U32 = 22
         public static let TWI1: U32 = 23
     }
-
     // MARK: - PMC (Power Management Controller)
 
     public enum PMC {
@@ -92,22 +92,49 @@ public enum ATSAM3X8E {
     }
 
     // MARK: - PIO (GPIO) offsets
+    //
+    // Observação importante:
+    // Muitos desses registradores são "write-only" (set/clear/enable/disable).
+    // Para leitura de estado do pino use PDSR (e ODSR se precisar estado de saída).
 
     public enum PIO {
+        // Control
         public static let PER_OFFSET:  U32 = 0x0000 // PIO Enable
+        public static let PDR_OFFSET:  U32 = 0x0004 // PIO Disable
+
+        // Output enable/disable
         public static let OER_OFFSET:  U32 = 0x0010 // Output Enable
         public static let ODR_OFFSET:  U32 = 0x0014 // Output Disable
+
+        // Input filter enable/disable
+        public static let IFER_OFFSET: U32 = 0x0020 // Input Filter Enable
+        public static let IFDR_OFFSET: U32 = 0x0024 // Input Filter Disable
+
+        // Output data (set/clear) + status
         public static let SODR_OFFSET: U32 = 0x0030 // Set Output Data
         public static let CODR_OFFSET: U32 = 0x0034 // Clear Output Data
+        public static let ODSR_OFFSET: U32 = 0x0038 // Output Data Status (read)
         public static let PDSR_OFFSET: U32 = 0x003C // Pin Data Status (read)
+
+        // Interrupt enable/disable + mask/status
+        public static let IER_OFFSET:  U32 = 0x0040 // Interrupt Enable
+        public static let IDR_OFFSET:  U32 = 0x0044 // Interrupt Disable
+        public static let IMR_OFFSET:  U32 = 0x0048 // Interrupt Mask (read)
+        public static let ISR_OFFSET:  U32 = 0x004C // Interrupt Status (read)
+
+        // Multi-driver (open-drain) enable/disable
+        public static let MDER_OFFSET: U32 = 0x0050 // Multi-driver Enable
+        public static let MDDR_OFFSET: U32 = 0x0054 // Multi-driver Disable
     }
 
-    // MARK: - PIO mux offsets
+    // MARK: - PIO mux offsets / extras
 
     public enum PIOX {
         public static let PDR_OFFSET:  U32 = 0x0004 // PIO Disable (hand over to peripheral)
         public static let ABSR_OFFSET: U32 = 0x0070 // Peripheral AB Select
+
         public static let PUER_OFFSET: U32 = 0x0064 // Pull-up Enable
+        public static let PUDR_OFFSET: U32 = 0x0060 // Pull-up Disable
     }
 
     // MARK: - UART
