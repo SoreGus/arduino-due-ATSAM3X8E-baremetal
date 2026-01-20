@@ -25,3 +25,5 @@ last_run.log
 .idea/
 Due_BareMetal.code-workspace
 Open_Due_BareMetal.command
+compile_commands.json
+.sourcekit-lsp
