@@ -27,3 +27,5 @@ Due_BareMetal.code-workspace
 Open_Due_BareMetal.command
 compile_commands.json
 .sourcekit-lsp
+# Arduino core (downloaded)
+arduino/
