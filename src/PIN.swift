@@ -93,10 +93,6 @@ public struct PIN {
     @inline(__always) public func isHigh() -> Bool { read() }
     @inline(__always) public func isLow()  -> Bool { !read() }
 
-    /// Para botões ativos em LOW: true quando pressionado
-    @inline(__always)
-    public func isPressedLow() -> Bool { isLow() }
-
     // MARK: - Write
 
     @inline(__always)
