@@ -1,5 +1,6 @@
 // Timer.swift — SysTick timer (Cortex-M3) for ATSAM3X8E (Arduino Due)
-// Depends on MMIO.swift providing: U32, bm_nop(), write32(), read32().
+// Depends on MMIO.swift providing: U32, bm_nop(), bm_disable_irq(), bm_enable_irq(),
+// write32(), read32(), bm_dsb(), bm_isb().
 
 // MUST be global and single symbol.
 public var g_msTicks: U32 = 0
@@ -32,12 +33,19 @@ public final class Timer {
             ATSAM3X8E.SysTick.CSR_TICKINT |
             ATSAM3X8E.SysTick.CSR_ENABLE
         )
+
+        bm_dsb()
+        bm_isb()
     }
 
     @inline(__always)
     public func millis() -> U32 {
-        bm_nop()
-        return g_msTicks
+        // Stable snapshot: SysTick IRQ might update while reading.
+        // Keep it minimal and deterministic.
+        bm_disable_irq()
+        let v = g_msTicks
+        bm_enable_irq()
+        return v
     }
 
     public func sleep(ms: U32) {

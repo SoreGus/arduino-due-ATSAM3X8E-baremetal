@@ -20,6 +20,10 @@ public enum ATSAM3X8E {
     // UART (Arduino Due "Programming Port" serial)
     public static let UART_BASE: U32 = 0x400E_0800
 
+    // TWI (I2C)
+    public static let TWI0_BASE: U32 = 0x4008_C000
+    public static let TWI1_BASE: U32 = 0x4009_0000
+
     // Cortex-M3 SysTick (SCS)
     public static let SYST_CSR: U32 = 0xE000_E010
     public static let SYST_RVR: U32 = 0xE000_E014
@@ -34,6 +38,10 @@ public enum ATSAM3X8E {
         public static let PIOB: U32 = 13
         public static let PIOC: U32 = 14
         public static let PIOD: U32 = 15
+
+        // TWI/I2C
+        public static let TWI0: U32 = 22
+        public static let TWI1: U32 = 23
     }
 
     // MARK: - PMC (Power Management Controller)
@@ -150,6 +158,114 @@ public enum ATSAM3X8E {
         public static let TX_MASK: U32 = U32(1) << TX_PIN
 
         public static let MASK: U32 = RX_MASK | TX_MASK
+    }
+
+    // MARK: - TWI (I2C)
+
+    public enum TWI {
+        // Registers (common offsets for TWI0/TWI1)
+        public static let CR_OFFSET:   U32 = 0x0000
+        public static let MMR_OFFSET:  U32 = 0x0004
+        public static let SMR_OFFSET:  U32 = 0x0008
+        public static let IADR_OFFSET: U32 = 0x000C
+        public static let CWGR_OFFSET: U32 = 0x0010
+
+        public static let SR_OFFSET:   U32 = 0x0020
+        public static let IER_OFFSET:  U32 = 0x0024
+        public static let IDR_OFFSET:  U32 = 0x0028
+        public static let IMR_OFFSET:  U32 = 0x002C
+        public static let RHR_OFFSET:  U32 = 0x0030
+        public static let THR_OFFSET:  U32 = 0x0034
+
+        // Direct absolute addresses for TWI0
+        public enum TWI0 {
+            public static let CR:   U32 = ATSAM3X8E.TWI0_BASE + ATSAM3X8E.TWI.CR_OFFSET
+            public static let MMR:  U32 = ATSAM3X8E.TWI0_BASE + ATSAM3X8E.TWI.MMR_OFFSET
+            public static let SMR:  U32 = ATSAM3X8E.TWI0_BASE + ATSAM3X8E.TWI.SMR_OFFSET
+            public static let IADR: U32 = ATSAM3X8E.TWI0_BASE + ATSAM3X8E.TWI.IADR_OFFSET
+            public static let CWGR: U32 = ATSAM3X8E.TWI0_BASE + ATSAM3X8E.TWI.CWGR_OFFSET
+
+            public static let SR:   U32 = ATSAM3X8E.TWI0_BASE + ATSAM3X8E.TWI.SR_OFFSET
+            public static let IER:  U32 = ATSAM3X8E.TWI0_BASE + ATSAM3X8E.TWI.IER_OFFSET
+            public static let IDR:  U32 = ATSAM3X8E.TWI0_BASE + ATSAM3X8E.TWI.IDR_OFFSET
+            public static let IMR:  U32 = ATSAM3X8E.TWI0_BASE + ATSAM3X8E.TWI.IMR_OFFSET
+            public static let RHR:  U32 = ATSAM3X8E.TWI0_BASE + ATSAM3X8E.TWI.RHR_OFFSET
+            public static let THR:  U32 = ATSAM3X8E.TWI0_BASE + ATSAM3X8E.TWI.THR_OFFSET
+        }
+
+        // Direct absolute addresses for TWI1
+        public enum TWI1 {
+            public static let CR:   U32 = ATSAM3X8E.TWI1_BASE + ATSAM3X8E.TWI.CR_OFFSET
+            public static let MMR:  U32 = ATSAM3X8E.TWI1_BASE + ATSAM3X8E.TWI.MMR_OFFSET
+            public static let SMR:  U32 = ATSAM3X8E.TWI1_BASE + ATSAM3X8E.TWI.SMR_OFFSET
+            public static let IADR: U32 = ATSAM3X8E.TWI1_BASE + ATSAM3X8E.TWI.IADR_OFFSET
+            public static let CWGR: U32 = ATSAM3X8E.TWI1_BASE + ATSAM3X8E.TWI.CWGR_OFFSET
+
+            public static let SR:   U32 = ATSAM3X8E.TWI1_BASE + ATSAM3X8E.TWI.SR_OFFSET
+            public static let IER:  U32 = ATSAM3X8E.TWI1_BASE + ATSAM3X8E.TWI.IER_OFFSET
+            public static let IDR:  U32 = ATSAM3X8E.TWI1_BASE + ATSAM3X8E.TWI.IDR_OFFSET
+            public static let IMR:  U32 = ATSAM3X8E.TWI1_BASE + ATSAM3X8E.TWI.IMR_OFFSET
+            public static let RHR:  U32 = ATSAM3X8E.TWI1_BASE + ATSAM3X8E.TWI.RHR_OFFSET
+            public static let THR:  U32 = ATSAM3X8E.TWI1_BASE + ATSAM3X8E.TWI.THR_OFFSET
+        }
+
+        // TWI_CR bits
+        public static let CR_START: U32 = U32(1) << 0
+        public static let CR_STOP:  U32 = U32(1) << 1
+        public static let CR_MSEN:  U32 = U32(1) << 2
+        public static let CR_MSDIS: U32 = U32(1) << 3
+        public static let CR_SVEN:  U32 = U32(1) << 4
+        public static let CR_SVDIS: U32 = U32(1) << 5
+        public static let CR_QUICK: U32 = U32(1) << 6
+        public static let CR_SWRST: U32 = U32(1) << 7
+
+        // TWI_MMR fields
+        public static let MMR_IADRSZ_SHIFT: U32 = 8
+        public static let MMR_IADRSZ_MASK:  U32 = 0x3 << MMR_IADRSZ_SHIFT
+        public static let MMR_IADRSZ_NONE:   U32 = 0x0 << MMR_IADRSZ_SHIFT
+        public static let MMR_IADRSZ_1BYTE:  U32 = 0x1 << MMR_IADRSZ_SHIFT
+        public static let MMR_IADRSZ_2BYTE:  U32 = 0x2 << MMR_IADRSZ_SHIFT
+        public static let MMR_IADRSZ_3BYTE:  U32 = 0x3 << MMR_IADRSZ_SHIFT
+
+        public static let MMR_MREAD: U32 = U32(1) << 12
+
+        public static let MMR_DADR_SHIFT: U32 = 16
+        public static let MMR_DADR_MASK:  U32 = 0x7F << MMR_DADR_SHIFT
+
+        // TWI_IADR fields
+        public static let IADR_IADR_SHIFT: U32 = 0
+        public static let IADR_IADR_MASK:  U32 = 0x00FF_FFFF << IADR_IADR_SHIFT
+
+        // TWI_CWGR fields
+        public static let CWGR_CLDIV_SHIFT: U32 = 0
+        public static let CWGR_CLDIV_MASK:  U32 = 0xFF << CWGR_CLDIV_SHIFT
+
+        public static let CWGR_CHDIV_SHIFT: U32 = 8
+        public static let CWGR_CHDIV_MASK:  U32 = 0xFF << CWGR_CHDIV_SHIFT
+
+        public static let CWGR_CKDIV_SHIFT: U32 = 16
+        public static let CWGR_CKDIV_MASK:  U32 = 0x7 << CWGR_CKDIV_SHIFT
+
+        // TWI_SR bits
+        public static let SR_TXCOMP: U32 = U32(1) << 0
+        public static let SR_RXRDY:  U32 = U32(1) << 1
+        public static let SR_TXRDY:  U32 = U32(1) << 2
+        public static let SR_SVREAD: U32 = U32(1) << 3
+        public static let SR_SVACC:  U32 = U32(1) << 4
+        public static let SR_GACC:   U32 = U32(1) << 5
+        public static let SR_OVRE:   U32 = U32(1) << 6
+        public static let SR_NACK:   U32 = U32(1) << 8
+        public static let SR_ARBLST: U32 = U32(1) << 9
+        public static let SR_SCLWS:  U32 = U32(1) << 10
+        public static let SR_EOSACC: U32 = U32(1) << 11
+        public static let SR_ENDRX:  U32 = U32(1) << 12
+        public static let SR_ENDTX:  U32 = U32(1) << 13
+        public static let SR_RXBUFF: U32 = U32(1) << 14
+        public static let SR_TXBUFE: U32 = U32(1) << 15
+
+        // TWI_RHR/TWI_THR data masks
+        public static let RHR_RXDATA_MASK: U32 = 0xFF
+        public static let THR_TXDATA_MASK: U32 = 0xFF
     }
 
     // MARK: - WDT

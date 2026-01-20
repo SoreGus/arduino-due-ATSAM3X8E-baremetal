@@ -1,6 +1,6 @@
 // SerialUART.swift — UART on ATSAM3X8E (Arduino Due "Programming Port" USB-serial)
 // Minimal polling TX/RX. No interrupts.
-// Depends on: MMIO.swift (U32, read32/write32/bm_nop) and ATSAM3X8E.swift.
+// Depends on: MMIO.swift and ATSAM3X8E.swift.
 
 public final class SerialUART {
     private let mckHz: U32
@@ -11,6 +11,7 @@ public final class SerialUART {
 
     public func begin(_ baud: U32) {
         // Enable UART peripheral clock (PCER0) — write-1-to-enable
+        // NOTE: PCER0 is write-only; do NOT read-modify-write.
         write32(ATSAM3X8E.PMC.PCER0, U32(1) << ATSAM3X8E.ID.UART)
 
         // Switch PA8/PA9 to Peripheral A (UART), disable PIO control
@@ -20,8 +21,8 @@ public final class SerialUART {
         write32(pioa + ATSAM3X8E.PIOX.PDR_OFFSET, ATSAM3X8E.PIOA_UART.MASK)
 
         // Select Peripheral A: ABSR bit=0 => A
-        let absr = read32(pioa + ATSAM3X8E.PIOX.ABSR_OFFSET) & ~ATSAM3X8E.PIOA_UART.MASK
-        write32(pioa + ATSAM3X8E.PIOX.ABSR_OFFSET, absr)
+        // ABSR is R/W so read-modify-write is fine here.
+        clearBits32(pioa + ATSAM3X8E.PIOX.ABSR_OFFSET, ATSAM3X8E.PIOA_UART.MASK)
 
         // Optional pull-up on RX
         write32(pioa + ATSAM3X8E.PIOX.PUER_OFFSET, ATSAM3X8E.PIOA_UART.RX_MASK)
@@ -37,8 +38,9 @@ public final class SerialUART {
         write32(ATSAM3X8E.UART.MR, mr)
 
         // Baud: CD = MCK / (16 * baud)
-        // (Use U32 math only; keep it tiny)
-        let cd = mckHz / (16 * baud)
+        // Add rounding to reduce error on some baud rates.
+        let denom = 16 * baud
+        let cd = (mckHz + (denom / 2)) / denom
         write32(ATSAM3X8E.UART.BRGR, cd)
 
         // Enable TX/RX
@@ -55,7 +57,7 @@ public final class SerialUART {
     }
 
     @inline(__always)
-    public func writeByte(_ b: UInt8) {
+    public func writeByte(_ b: U8) {
         while (read32(ATSAM3X8E.UART.SR) & ATSAM3X8E.UART.SR_TXRDY) == 0 {
             bm_nop()
         }
@@ -69,17 +71,15 @@ public final class SerialUART {
         }
     }
 
-    // ✅ Hex print sem divisao (nao puxa __aeabi_uldivmod)
+    // Hex print sem divisao (nao puxa __aeabi_uldivmod)
     public func writeHex32(_ v: U32, prefix: Bool = true) {
         if prefix { writeString("0x") }
-        let hex: [UInt8] = Array("0123456789ABCDEF".utf8)
+        let hex: [U8] = Array("0123456789ABCDEF".utf8)
 
-        // 8 nibbles, do mais alto pro mais baixo
         var shift: U32 = 28
         while true {
             let nib = Int((v >> shift) & 0xF)
             writeByte(hex[nib])
-
             if shift == 0 { break }
             shift &-= 4
         }

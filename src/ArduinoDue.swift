@@ -1,14 +1,18 @@
 // ArduinoDue.swift — Arduino Due digital pin mapping (D0...D53)
-// Provides a small mapping layer: Arduino digital pin -> SAM3X PIO port + bit.
 //
-// Source: Arduino Due documentation pin mapping table (D0..D53).  [oai_citation:1‡Imimg](https://5.imimg.com/data5/OZ/WE/IJ/SELLER-1833510/arduino-due.pdf)
+// Provides a small mapping layer: Arduino digital pin -> SAM3X PIO port + bit.
 //
 // Notes:
 // - D4 is connected to BOTH PA29 and PC26.
 // - D10 is connected to BOTH PA28 and PC29.
 // For those, we expose a "secondary" mapping so PIN can drive both.
+//
+// This file ALSO defines the board-level I2C (TWI) pin wiring for Wire/Wire1,
+// including which peripheral mux (A/B) the pins must be switched to.
 
 public enum ArduinoDue {
+    // MARK: - Generic digital mapping
+
     public struct DigitalPinDesc {
         public let pioBase: U32
         public let pioID: U32
@@ -76,7 +80,7 @@ public enum ArduinoDue {
         switch pin {
         case 0:  return PA(8)    // RX0
         case 1:  return PA(9)    // TX0
-        case 2:  return PB(25)   // D2   [oai_citation:2‡Imimg](https://5.imimg.com/data5/OZ/WE/IJ/SELLER-1833510/arduino-due.pdf)
+        case 2:  return PB(25)   // D2
         case 3:  return PC(28)   // D3
         case 4:  return D4       // D4: PA29 + PC26
         case 5:  return PC(25)   // D5
@@ -94,8 +98,8 @@ public enum ArduinoDue {
         case 17: return PA(12)   // RX2
         case 18: return PA(11)   // TX1
         case 19: return PA(10)   // RX1
-        case 20: return PB(12)   // SDA
-        case 21: return PB(13)   // SCL
+        case 20: return PB(12)   // SDA (Wire / TWI0)
+        case 21: return PB(13)   // SCL (Wire / TWI0)
         case 22: return PB(26)   // D22
         case 23: return PA(14)   // D23
         case 24: return PA(15)   // D24
@@ -131,5 +135,84 @@ public enum ArduinoDue {
         default:
             return nil
         }
+    }
+
+    // MARK: - I2C (TWI) wiring for the Due board
+
+    public enum PeripheralSel {
+        case a
+        case b
+    }
+
+    public struct I2CPinDesc {
+        public let pioBase: U32
+        public let pioID: U32
+        public let mask: U32
+        public let peripheral: PeripheralSel
+        public let enablePullup: Bool
+
+        @inline(__always)
+        public init(
+            pioBase: U32,
+            pioID: U32,
+            bit: U32,
+            peripheral: PeripheralSel,
+            enablePullup: Bool = true
+        ) {
+            self.pioBase = pioBase
+            self.pioID = pioID
+            self.mask = U32(1) << bit
+            self.peripheral = peripheral
+            self.enablePullup = enablePullup
+        }
+    }
+
+    /// Arduino "Wire" (pins 20/21): TWI0 on PB12/PB13
+    /// (Standard SDA/SCL header)
+    public enum Wire {
+        public static let twiPeripheralID: U32 = ATSAM3X8E.ID.TWI0
+        public static let twiBase: U32 = ATSAM3X8E.TWI0_BASE
+
+        public static let sda: I2CPinDesc = .init(
+            pioBase: ATSAM3X8E.PIOB_BASE,
+            pioID: ATSAM3X8E.ID.PIOB,
+            bit: 12,
+            peripheral: .a,
+            enablePullup: true
+        )
+
+        public static let scl: I2CPinDesc = .init(
+            pioBase: ATSAM3X8E.PIOB_BASE,
+            pioID: ATSAM3X8E.ID.PIOB,
+            bit: 13,
+            peripheral: .a,
+            enablePullup: true
+        )
+
+        public static let pinsMask: U32 = sda.mask | scl.mask
+    }
+
+    /// Arduino "Wire1" (SDA1/SCL1 header): TWI1 on PA17/PA18
+    public enum Wire1 {
+        public static let twiPeripheralID: U32 = ATSAM3X8E.ID.TWI1
+        public static let twiBase: U32 = ATSAM3X8E.TWI1_BASE
+
+        public static let sda: I2CPinDesc = .init(
+            pioBase: ATSAM3X8E.PIOA_BASE,
+            pioID: ATSAM3X8E.ID.PIOA,
+            bit: 17,
+            peripheral: .a,
+            enablePullup: true
+        )
+
+        public static let scl: I2CPinDesc = .init(
+            pioBase: ATSAM3X8E.PIOA_BASE,
+            pioID: ATSAM3X8E.ID.PIOA,
+            bit: 18,
+            peripheral: .a,
+            enablePullup: true
+        )
+
+        public static let pinsMask: U32 = sda.mask | scl.mask
     }
 }
