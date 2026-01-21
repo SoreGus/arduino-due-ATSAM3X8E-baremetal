@@ -55,7 +55,10 @@ SWIFT_SRCS := $(SRC_DIR)/MMIO.swift \
               $(SRC_DIR)/ArduinoDue.swift \
               $(SRC_DIR)/Board.swift \
               $(SRC_DIR)/I2C.swift \
-              $(SRC_DIR)/AnalogPIN.swift
+              $(SRC_DIR)/AnalogPIN.swift \
+              $(SRC_DIR)/ATSAM3X8E+USB.swift \
+              $(SRC_DIR)/SerialUSBDescriptor.swift \
+              $(SRC_DIR)/USB.swift
 
 STARTUP_S  := $(ARM_DIR)/startup.s
 LINKER_LD  := $(ARM_DIR)/linker.ld

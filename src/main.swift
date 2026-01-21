@@ -1,102 +1,184 @@
-// main.swift
-
-// ---------- Helpers ----------
-
-@inline(__always)
-func decString(_ value: U16) -> String {
-    // Max for ADC/DAC here is 4095 (4 digits), but keep 5 for safety.
-    var v = value
-    var buf = [UInt8](repeating: 0, count: 5)
-    var i: Int = 0
-
-    // Must handle 0 correctly.
-    repeat {
-        buf[i] = UInt8(v % 10) + 48 // '0'
-        v /= 10
-        i += 1
-    } while v > 0
-
-    var s = ""
-    while i > 0 {
-        i -= 1
-        // ASCII digits only, so this is safe.
-        s.append(Character(UnicodeScalar(buf[i])))
-    }
-    return s
-}
-
-// ---------- Main ----------
+// main.swift — minimal USB debug loop (UART + Native USB)
+//
+// Ajustes:
+// - Sem alocações grandes no loop.
+// - “dump” de registradores após usb.begin() (isso mata 90% do debug de enum).
+// - Não chama CDC TX se não estiver configurado.
+// - Mantém RX opcional.
+//
+// Depende de:
+// - Board.initBoard(baud:printBootBanner:)
+// - SerialUART.writeByte, writeString
+// - Timer.millis()
+// - PIN
+// - bm_nop
+// - ATSAM3X8E+USB.swift (reg addresses / bits)
+// - USBDevice (USB.swift)
 
 @_cdecl("main")
 public func main() -> Never {
-    let ctx = Board.initBoard()
+    let ctx = Board.initBoard(baud: 115_200, printBootBanner: true)
     let serial = ctx.serial
     let timer  = ctx.timer
 
-    // ADC clock correto (principalmente se clock cair em 4MHz)
-    AnalogPIN.configure(mckHz: ctx.mckHz)
+    // LED (D13)
+    let led = PIN(13)
+    led.output()
+    led.off()
 
-    // LEDs
-    let led13 = PIN(13)
-    let led7  = PIN(7)
-    led13.output()
-    led7.output()
-    led7.on()
+    serial.writeString("MAIN: start\r\n")
 
-    // Botões
-    let btnA = PIN(3)
-    let btnB = PIN(4)
-    let btnC = PIN(5)
-    let btnD = PIN(6)
+    // --- USB ---
+    let usb = USBDevice()
+    serial.writeString("USB: begin...\r\n")
+    usb.begin()
+    serial.writeString("USB: begin done\r\n")
 
-    btnA.inputPullup()
-    btnB.inputPullup()
-    btnC.inputPullup()
-    btnD.inputPullup()
+    // Dump registradores críticos (se Mac não detecta, isso aqui aponta na hora)
+    dumpUSBRegs(serial)
 
-    var lastA = false
-    var lastB = false
-    var lastC = false
-    var lastD = false
+    var lastBeat: U32 = timer.millis()
+    var lastReport: U32 = lastBeat
+    let bootTime: U32 = lastBeat
 
-    // ADC
-    let a0 = AnalogPIN(0) // A0
-    let a1 = AnalogPIN(1) // A1
-
-    serial.writeString("Ready (Buttons + ADC A0/A1)\r\n")
+    var beat = false
+    var cdcTick: U32 = 0
 
     while true {
-        // ---- Botões ----
-        let a = btnA.isLow()
-        let b = btnB.isLow()
-        let c = btnC.isLow()
-        let d = btnD.isLow()
+        usb.poll()
 
-        if !lastA && a { serial.writeString("A\r\n"); led13.toggle(); led7.toggle() }
-        if !lastB && b { serial.writeString("B\r\n"); led13.toggle(); led7.toggle() }
-        if !lastC && c { serial.writeString("C\r\n"); led13.toggle(); led7.toggle() }
-        if !lastD && d { serial.writeString("D\r\n"); led13.toggle(); led7.toggle() }
+        // ---- RX: até 16 bytes/loop ----
+        var readCount = 0
+        while usb.cdcAvailable() > 0 && readCount < 16 {
+            let v = usb.cdcRead()
+            if v < 0 { break }
 
-        lastA = a
-        lastB = b
-        lastC = c
-        lastD = d
-
-        // ---- ADC ----
-        do {
-            let v0 = try a0.readRaw()
-            let v1 = try a1.readRaw()
-
-            serial.writeString("A0=")
-            serial.writeString(decString(v0))
-            serial.writeString("  A1=")
-            serial.writeString(decString(v1))
+            let b = UInt8(truncatingIfNeeded: v)
+            serial.writeString("CDC RX: 0x")
+            serial.writeHex8(b)
             serial.writeString("\r\n")
-        } catch let e {
-            _ = e
-            serial.writeString("ADC error\r\n")
+
+            readCount &+= 1
         }
 
-        timer.sleepFor(ms: 100)
+        let now = timer.millis()
+
+        // ---- heartbeat 250ms ----
+        if (now &- lastBeat) >= 250 {
+            lastBeat = now
+            beat.toggle()
+            if beat { led.on() } else { led.off() }
+        }
+
+        // ---- report 1s ----
+        if (now &- lastReport) >= 1000 {
+            lastReport = now
+
+            serial.writeString("T=")
+            serial.writeU32(now)
+            serial.writeString("  usb_poll_ok  cfg=")
+            serial.writeByte(usb.isConfigured ? 49 : 48) // '1' : '0'
+            serial.writeString("\r\n")
+
+            if usb.isConfigured {
+                cdcTick &+= 1
+
+                usb.cdcWriteString("ping ")
+                usb.cdcWriteU32(cdcTick)
+                usb.cdcWriteString("\r\n")
+
+                serial.writeString("CDC TX: ping ")
+                serial.writeU32(cdcTick)
+                serial.writeString("\r\n")
+            } else {
+                let dt = now &- bootTime
+                serial.writeString("CDC: waiting enumeration (")
+                serial.writeU32(dt)
+                serial.writeString("ms)\r\n")
+
+                // Dump leve a cada 2s enquanto não enumera
+                if (dt % 2000) < 20 {
+                    dumpUSBRegs(serial)
+                }
+            }
+        }
+
+        bm_nop()
+    }
+}
+
+// MARK: - Debug dump
+
+@inline(__always)
+private func dumpUSBRegs(_ serial: SerialUART) {
+    let ctrl    = read32(ATSAM3X8E.UOTGHS.CTRL)
+    let devctrl = read32(ATSAM3X8E.UOTGHS.DEVCTRL)
+    let devisr  = read32(ATSAM3X8E.UOTGHS.DEVISR)
+    let devimr  = read32(ATSAM3X8E.UOTGHS.DEVIMR)
+    let devaddr = read32(ATSAM3X8E.UOTGHS.DEVADDR)
+
+    serial.writeString("USBREG CTRL=0x");    serial.writeHex32(ctrl)
+    serial.writeString(" DEVCTRL=0x");       serial.writeHex32(devctrl)
+    serial.writeString(" DEVISR=0x");        serial.writeHex32(devisr)
+    serial.writeString(" DEVIMR=0x");        serial.writeHex32(devimr)
+    serial.writeString(" DEVADDR=0x");       serial.writeHex32(devaddr)
+    serial.writeString("\r\n")
+}
+
+// MARK: - UART helpers
+
+extension SerialUART {
+    public func writeU32(_ v: U32) {
+        var x = v
+        var buf = [UInt8](repeating: 0, count: 10)
+        var i = 0
+        repeat {
+            buf[i] = UInt8(x % 10) + 48
+            x /= 10
+            i &+= 1
+        } while x > 0
+
+        while i > 0 {
+            i &-= 1
+            writeByte(buf[i])
+        }
+    }
+
+    public func writeHex8(_ b: UInt8) {
+        let hex: [UInt8] = Array("0123456789ABCDEF".utf8)
+        writeByte(hex[Int((b >> 4) & 0x0F)])
+        writeByte(hex[Int(b & 0x0F)])
+    }
+
+    public func writeHex32(_ v: U32) {
+        writeHex8(UInt8(truncatingIfNeeded: (v >> 24) & 0xFF))
+        writeHex8(UInt8(truncatingIfNeeded: (v >> 16) & 0xFF))
+        writeHex8(UInt8(truncatingIfNeeded: (v >>  8) & 0xFF))
+        writeHex8(UInt8(truncatingIfNeeded: (v >>  0) & 0xFF))
+    }
+}
+
+// MARK: - USB helpers: send UInt32 as ASCII sem String
+
+extension USBDevice {
+    public func cdcWriteU32(_ v: U32) {
+        var x = v
+        var buf = [UInt8](repeating: 0, count: 10)
+        var i = 0
+        repeat {
+            buf[i] = UInt8(x % 10) + 48
+            x /= 10
+            i &+= 1
+        } while x > 0
+
+        // escreve invertido sem criar String
+        // (buf[0..i-1] contém dígitos invertidos)
+        var out: [UInt8] = []
+        out.reserveCapacity(i)
+        while i > 0 {
+            i &-= 1
+            out.append(buf[i])
+        }
+        cdcWrite(out)
     }
 }
