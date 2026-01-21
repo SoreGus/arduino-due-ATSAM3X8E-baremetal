@@ -137,6 +137,68 @@ public enum ArduinoDue {
         }
     }
 
+    // MARK: - Analog mapping (A0..A11 + DAC0/DAC1)
+
+    public struct AnalogPinDesc {
+        public enum PeripheralSel { case a, b }
+
+        public let kind: AnalogKind
+        public let pioBase: U32
+        public let pioID: U32
+        public let mask: U32
+        public let peripheral: PeripheralSel
+
+        @inline(__always)
+        public init(
+            kind: AnalogKind,
+            pioBase: U32,
+            pioID: U32,
+            bit: U32,
+            peripheral: PeripheralSel
+        ) {
+            self.kind = kind
+            self.pioBase = pioBase
+            self.pioID = pioID
+            self.mask = U32(1) << bit
+            self.peripheral = peripheral
+        }
+    }
+
+    public enum AnalogKind: Equatable {
+        case adc(channel: U32) // ADC channel 0..15
+        case dac(channel: U32) // DACC channel 0..1
+    }
+
+    /// Analog pin numbers follow Arduino:
+    /// - 0...11 => A0...A11 (ADC)
+    /// - 12 => DAC0
+    /// - 13 => DAC1
+    @inline(__always)
+    public static func analog(_ analogPin: U32) -> AnalogPinDesc? {
+        switch analogPin {
+        // ADC inputs (Peripheral A)
+        case 0:  return .init(kind: .adc(channel: 7),  pioBase: ATSAM3X8E.PIOA_BASE, pioID: ATSAM3X8E.ID.PIOA, bit: 16, peripheral: .a) // A0  -> PA16 / AD7
+        case 1:  return .init(kind: .adc(channel: 6),  pioBase: ATSAM3X8E.PIOA_BASE, pioID: ATSAM3X8E.ID.PIOA, bit: 24, peripheral: .a) // A1  -> PA24 / AD6
+        case 2:  return .init(kind: .adc(channel: 5),  pioBase: ATSAM3X8E.PIOA_BASE, pioID: ATSAM3X8E.ID.PIOA, bit: 23, peripheral: .a) // A2  -> PA23 / AD5
+        case 3:  return .init(kind: .adc(channel: 4),  pioBase: ATSAM3X8E.PIOA_BASE, pioID: ATSAM3X8E.ID.PIOA, bit: 22, peripheral: .a) // A3  -> PA22 / AD4
+        case 4:  return .init(kind: .adc(channel: 3),  pioBase: ATSAM3X8E.PIOA_BASE, pioID: ATSAM3X8E.ID.PIOA, bit: 6,  peripheral: .a) // A4  -> PA6  / AD3
+        case 5:  return .init(kind: .adc(channel: 2),  pioBase: ATSAM3X8E.PIOA_BASE, pioID: ATSAM3X8E.ID.PIOA, bit: 4,  peripheral: .a) // A5  -> PA4  / AD2
+        case 6:  return .init(kind: .adc(channel: 1),  pioBase: ATSAM3X8E.PIOA_BASE, pioID: ATSAM3X8E.ID.PIOA, bit: 3,  peripheral: .a) // A6  -> PA3  / AD1
+        case 7:  return .init(kind: .adc(channel: 0),  pioBase: ATSAM3X8E.PIOA_BASE, pioID: ATSAM3X8E.ID.PIOA, bit: 2,  peripheral: .a) // A7  -> PA2  / AD0
+        case 8:  return .init(kind: .adc(channel: 10), pioBase: ATSAM3X8E.PIOB_BASE, pioID: ATSAM3X8E.ID.PIOB, bit: 17, peripheral: .a) // A8  -> PB17 / AD10
+        case 9:  return .init(kind: .adc(channel: 11), pioBase: ATSAM3X8E.PIOB_BASE, pioID: ATSAM3X8E.ID.PIOB, bit: 18, peripheral: .a) // A9  -> PB18 / AD11
+        case 10: return .init(kind: .adc(channel: 12), pioBase: ATSAM3X8E.PIOB_BASE, pioID: ATSAM3X8E.ID.PIOB, bit: 19, peripheral: .a) // A10 -> PB19 / AD12
+        case 11: return .init(kind: .adc(channel: 13), pioBase: ATSAM3X8E.PIOB_BASE, pioID: ATSAM3X8E.ID.PIOB, bit: 20, peripheral: .a) // A11 -> PB20 / AD13
+
+        // DAC outputs (Peripheral B)
+        case 12: return .init(kind: .dac(channel: 0), pioBase: ATSAM3X8E.PIOB_BASE, pioID: ATSAM3X8E.ID.PIOB, bit: 15, peripheral: .b) // DAC0 -> PB15 / DACC0
+        case 13: return .init(kind: .dac(channel: 1), pioBase: ATSAM3X8E.PIOB_BASE, pioID: ATSAM3X8E.ID.PIOB, bit: 16, peripheral: .b) // DAC1 -> PB16 / DACC1
+
+        default:
+            return nil
+        }
+    }
+
     // MARK: - I2C (TWI) wiring for the Due board
 
     public enum PeripheralSel {

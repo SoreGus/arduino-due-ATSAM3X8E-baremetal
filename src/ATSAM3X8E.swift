@@ -29,8 +29,11 @@ public enum ATSAM3X8E {
     public static let SYST_RVR: U32 = 0xE000_E014
     public static let SYST_CVR: U32 = 0xE000_E018
 
-    // MARK: - Peripheral IDs (for PMC clock enable)
+    // MARK: - ADC / DACC base addresses
+    public static let ADC_BASE:  U32 = 0x400C_0000
+    public static let DACC_BASE: U32 = 0x400C_8000
 
+    // MARK: - Peripheral IDs (for PMC clock enable)
     public enum ID {
         public static let UART: U32 = 8
 
@@ -43,12 +46,23 @@ public enum ATSAM3X8E {
         // TWI/I2C
         public static let TWI0: U32 = 22
         public static let TWI1: U32 = 23
-    }
-    // MARK: - PMC (Power Management Controller)
 
+        // Analog
+        public static let ADC:  U32 = 37
+        public static let DACC: U32 = 38
+    }
+
+    // MARK: - PMC (Power Management Controller)
     public enum PMC {
         // Registers
         public static let PCER0: U32 = ATSAM3X8E.PMC_BASE + 0x0010
+        public static let PCDR0: U32 = ATSAM3X8E.PMC_BASE + 0x0014
+        public static let PCSR0: U32 = ATSAM3X8E.PMC_BASE + 0x0018
+
+        // Peripherals with IDs >= 32 use PCER1/PCDR1/PCSR1 (e.g. ADC=37, DACC=38)
+        public static let PCER1: U32 = ATSAM3X8E.PMC_BASE + 0x0100
+        public static let PCDR1: U32 = ATSAM3X8E.PMC_BASE + 0x0104
+        public static let PCSR1: U32 = ATSAM3X8E.PMC_BASE + 0x0108
 
         public static let CKGR_MOR:   U32 = ATSAM3X8E.PMC_BASE + 0x0020
         public static let CKGR_PLLAR: U32 = ATSAM3X8E.PMC_BASE + 0x0028
@@ -81,7 +95,6 @@ public enum ATSAM3X8E {
     }
 
     // MARK: - EEFC (Flash Controller)
-
     public enum EEFC {
         // Registers (offsets)
         public static let FMR_OFFSET: U32 = 0x0000
@@ -96,7 +109,6 @@ public enum ATSAM3X8E {
     // Observação importante:
     // Muitos desses registradores são "write-only" (set/clear/enable/disable).
     // Para leitura de estado do pino use PDSR (e ODSR se precisar estado de saída).
-
     public enum PIO {
         // Control
         public static let PER_OFFSET:  U32 = 0x0000 // PIO Enable
@@ -128,7 +140,6 @@ public enum ATSAM3X8E {
     }
 
     // MARK: - PIO mux offsets / extras
-
     public enum PIOX {
         public static let PDR_OFFSET:  U32 = 0x0004 // PIO Disable (hand over to peripheral)
         public static let ABSR_OFFSET: U32 = 0x0070 // Peripheral AB Select
@@ -137,8 +148,96 @@ public enum ATSAM3X8E {
         public static let PUDR_OFFSET: U32 = 0x0060 // Pull-up Disable
     }
 
-    // MARK: - UART
+    // MARK: - ADC (register offsets + bits/fields)
+    public enum ADC {
+        // Offsets (SAM3X8E)
+        public static let CR_OFFSET:   U32 = 0x00
+        public static let MR_OFFSET:   U32 = 0x04
+        public static let CHER_OFFSET: U32 = 0x10
+        public static let CHDR_OFFSET: U32 = 0x14
+        public static let CHSR_OFFSET: U32 = 0x18
 
+        // 0x1C is RESERVED on SAM3X ADC (do not use)
+        public static let LCDR_OFFSET: U32 = 0x20
+
+        public static let IER_OFFSET:  U32 = 0x24
+        public static let IDR_OFFSET:  U32 = 0x28
+        public static let IMR_OFFSET:  U32 = 0x2C
+        public static let ISR_OFFSET:  U32 = 0x30
+
+        // CDR0..CDR15 start at 0x50 (step 4)
+        public static let CDR0_OFFSET: U32 = 0x50
+
+        // Absolute addresses
+        public static let CR:   U32 = ATSAM3X8E.ADC_BASE + CR_OFFSET
+        public static let MR:   U32 = ATSAM3X8E.ADC_BASE + MR_OFFSET
+        public static let CHER: U32 = ATSAM3X8E.ADC_BASE + CHER_OFFSET
+        public static let CHDR: U32 = ATSAM3X8E.ADC_BASE + CHDR_OFFSET
+        public static let CHSR: U32 = ATSAM3X8E.ADC_BASE + CHSR_OFFSET
+
+        public static let LCDR: U32 = ATSAM3X8E.ADC_BASE + LCDR_OFFSET
+
+        public static let IER:  U32 = ATSAM3X8E.ADC_BASE + IER_OFFSET
+        public static let IDR:  U32 = ATSAM3X8E.ADC_BASE + IDR_OFFSET
+        public static let IMR:  U32 = ATSAM3X8E.ADC_BASE + IMR_OFFSET
+        public static let ISR:  U32 = ATSAM3X8E.ADC_BASE + ISR_OFFSET
+
+        public static let CDR0: U32 = ATSAM3X8E.ADC_BASE + CDR0_OFFSET
+
+        // Backward-compat alias (some code used `SR`; SAM3X ADC uses ISR for EOC bits)
+        public static let SR: U32 = ISR
+
+        // CR bits
+        public static let CR_SWRST: U32 = U32(1) << 0
+        public static let CR_START: U32 = U32(1) << 1
+
+        // MR fields
+        public static let MR_PRESCAL_SHIFT: U32 = 8
+        public static let MR_PRESCAL_MASK:  U32 = 0xFF << MR_PRESCAL_SHIFT
+
+        public static let MR_STARTUP_SHIFT: U32 = 16
+        public static let MR_STARTUP_MASK:  U32 = 0x0F << MR_STARTUP_SHIFT
+
+        public static let MR_TRACKTIM_SHIFT: U32 = 24
+        public static let MR_TRACKTIM_MASK:  U32 = 0x0F << MR_TRACKTIM_SHIFT
+
+        public static let MR_TRANSFER_SHIFT: U32 = 28
+        public static let MR_TRANSFER_MASK:  U32 = 0x03 << MR_TRANSFER_SHIFT
+
+        // CDR helpers
+        public static let CDR_STRIDE: U32 = 4
+        public static let CDR_12BIT_MASK: U32 = 0x0FFF
+    }
+
+    // MARK: - DACC (register offsets + bits/fields)
+    public enum DACC {
+        // Offsets
+        public static let CR_OFFSET:   U32 = 0x00
+        public static let MR_OFFSET:   U32 = 0x04
+        public static let CHER_OFFSET: U32 = 0x10
+        public static let CDR_OFFSET:  U32 = 0x20
+        public static let ISR_OFFSET:  U32 = 0x30
+
+        // Absolute addresses
+        public static let CR:   U32 = ATSAM3X8E.DACC_BASE + CR_OFFSET
+        public static let MR:   U32 = ATSAM3X8E.DACC_BASE + MR_OFFSET
+        public static let CHER: U32 = ATSAM3X8E.DACC_BASE + CHER_OFFSET
+        public static let CDR:  U32 = ATSAM3X8E.DACC_BASE + CDR_OFFSET
+        public static let ISR:  U32 = ATSAM3X8E.DACC_BASE + ISR_OFFSET
+
+        // CR bits
+        public static let CR_SWRST: U32 = U32(1) << 0
+
+        // MR bits we use
+        public static let MR_TRGEN_DIS: U32 = 0 << 0
+        public static let MR_WORD_HALF: U32 = 0 << 4
+        public static let MR_TAG_EN:    U32 = U32(1) << 20
+
+        // ISR bits
+        public static let ISR_TXRDY: U32 = U32(1) << 0
+    }
+
+    // MARK: - UART
     public enum UART {
         public static let CR:   U32 = ATSAM3X8E.UART_BASE + 0x0000
         public static let MR:   U32 = ATSAM3X8E.UART_BASE + 0x0004
@@ -176,7 +275,6 @@ public enum ATSAM3X8E {
     }
 
     // MARK: - UART pins (PA8/PA9)
-
     public enum PIOA_UART {
         public static let RX_PIN: U32 = 8
         public static let TX_PIN: U32 = 9
@@ -188,7 +286,6 @@ public enum ATSAM3X8E {
     }
 
     // MARK: - TWI (I2C)
-
     public enum TWI {
         // Registers (common offsets for TWI0/TWI1)
         public static let CR_OFFSET:   U32 = 0x0000
@@ -204,13 +301,11 @@ public enum ATSAM3X8E {
         public static let RHR_OFFSET:  U32 = 0x0030
         public static let THR_OFFSET:  U32 = 0x0034
 
-        // PDC (DMA) offsets — NECESSÁRIOS para slave funcionar corretamente
+        // PDC (DMA) offsets
         public static let PTCR_OFFSET: U32 = 0x0120
         public static let PTSR_OFFSET: U32 = 0x0124
 
-        // -------------------------------------------------------------------------
         // Direct absolute addresses for TWI0
-        // -------------------------------------------------------------------------
         public enum TWI0 {
             public static let CR:   U32 = ATSAM3X8E.TWI0_BASE + TWI.CR_OFFSET
             public static let MMR:  U32 = ATSAM3X8E.TWI0_BASE + TWI.MMR_OFFSET
@@ -229,9 +324,7 @@ public enum ATSAM3X8E {
             public static let PTSR: U32 = ATSAM3X8E.TWI0_BASE + TWI.PTSR_OFFSET
         }
 
-        // -------------------------------------------------------------------------
         // Direct absolute addresses for TWI1
-        // -------------------------------------------------------------------------
         public enum TWI1 {
             public static let CR:   U32 = ATSAM3X8E.TWI1_BASE + TWI.CR_OFFSET
             public static let MMR:  U32 = ATSAM3X8E.TWI1_BASE + TWI.MMR_OFFSET
@@ -250,9 +343,7 @@ public enum ATSAM3X8E {
             public static let PTSR: U32 = ATSAM3X8E.TWI1_BASE + TWI.PTSR_OFFSET
         }
 
-        // -------------------------------------------------------------------------
         // TWI_CR bits
-        // -------------------------------------------------------------------------
         public static let CR_START: U32 = U32(1) << 0
         public static let CR_STOP:  U32 = U32(1) << 1
         public static let CR_MSEN:  U32 = U32(1) << 2
@@ -262,9 +353,7 @@ public enum ATSAM3X8E {
         public static let CR_QUICK: U32 = U32(1) << 6
         public static let CR_SWRST: U32 = U32(1) << 7
 
-        // -------------------------------------------------------------------------
         // TWI_MMR fields
-        // -------------------------------------------------------------------------
         public static let MMR_IADRSZ_SHIFT: U32 = 8
         public static let MMR_IADRSZ_MASK:  U32 = 0x3 << MMR_IADRSZ_SHIFT
         public static let MMR_IADRSZ_NONE:  U32 = 0x0 << MMR_IADRSZ_SHIFT
@@ -277,15 +366,11 @@ public enum ATSAM3X8E {
         public static let MMR_DADR_SHIFT: U32 = 16
         public static let MMR_DADR_MASK:  U32 = 0x7F << MMR_DADR_SHIFT
 
-        // -------------------------------------------------------------------------
         // TWI_IADR fields
-        // -------------------------------------------------------------------------
         public static let IADR_IADR_SHIFT: U32 = 0
         public static let IADR_IADR_MASK:  U32 = 0x00FF_FFFF << IADR_IADR_SHIFT
 
-        // -------------------------------------------------------------------------
         // TWI_CWGR fields
-        // -------------------------------------------------------------------------
         public static let CWGR_CLDIV_SHIFT: U32 = 0
         public static let CWGR_CLDIV_MASK:  U32 = 0xFF << CWGR_CLDIV_SHIFT
 
@@ -295,9 +380,7 @@ public enum ATSAM3X8E {
         public static let CWGR_CKDIV_SHIFT: U32 = 16
         public static let CWGR_CKDIV_MASK:  U32 = 0x7 << CWGR_CKDIV_SHIFT
 
-        // -------------------------------------------------------------------------
         // TWI_SR bits
-        // -------------------------------------------------------------------------
         public static let SR_TXCOMP: U32 = U32(1) << 0
         public static let SR_RXRDY:  U32 = U32(1) << 1
         public static let SR_TXRDY:  U32 = U32(1) << 2
@@ -314,22 +397,18 @@ public enum ATSAM3X8E {
         public static let SR_RXBUFF: U32 = U32(1) << 14
         public static let SR_TXBUFE: U32 = U32(1) << 15
 
-        // -------------------------------------------------------------------------
         // TWI_RHR / TWI_THR data masks
-        // -------------------------------------------------------------------------
         public static let RHR_RXDATA_MASK: U32 = 0xFF
         public static let THR_TXDATA_MASK: U32 = 0xFF
     }
 
     // MARK: - WDT
-
     public enum WDT {
         public static let MR: U32 = ATSAM3X8E.WDT_BASE + 0x0004
         public static let WDT_MR_WDDIS: U32 = U32(1) << 15
     }
 
     // MARK: - SysTick bits
-
     public enum SysTick {
         public static let CSR_ENABLE:  U32 = U32(1) << 0
         public static let CSR_TICKINT: U32 = U32(1) << 1

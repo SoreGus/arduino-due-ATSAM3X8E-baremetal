@@ -1,4 +1,39 @@
-// main.swift
+// Joystick.swift
+//
+// Example: Arduino Due Joystick Shield (Analog + Buttons)
+//
+// This file demonstrates how to use the SAM3X8E ADC and GPIO
+// in pure bare-metal Embedded Swift, without Arduino core or HAL.
+//
+// Hardware assumed:
+// - Arduino Due (ATSAM3X8E, Cortex-M3)
+// - Common Joystick Shield:
+//     • X axis  -> A0 (potentiometer)
+//     • Y axis  -> A1 (potentiometer)
+//     • Buttons -> Digital pins (typically D2–D7, depending on shield)
+//
+// Features shown:
+// - Raw ADC reads (12-bit, 0–4095)
+// - Stable analog input configuration
+// - Digital input with pull-up
+// - Simple polling loop (no interrupts)
+// - UART output for debugging/telemetry
+//
+// Purpose:
+// - Serve as a reference "main-like" example
+// - Validate AnalogPIN + PIN drivers
+// - Provide a clean base for games, UI navigation,
+//   or custom input devices on bare metal
+//
+// Notes:
+// - ADC values are read via ADC_LCDR (last converted value),
+//   matching the official Arduino-SAM implementation.
+// - No floating-point math is used (Embedded Swift safe).
+// - Timing is cooperative via Timer.sleepFor(ms:).
+//
+// This file is intentionally simple and explicit,
+// prioritizing clarity over abstraction.
+//
 
 // ---------- Helpers ----------
 
