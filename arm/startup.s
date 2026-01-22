@@ -20,10 +20,11 @@
 .global g_pfnVectors
 .type g_pfnVectors, %object
 
-/* ✅ Cortex-M requer alinhamento do VTOR:
-   - mínimo 128 bytes em muitos casos (depende do nº de IRQs)
+/* ✅ Alinhamento do VTOR:
+   Tamanho da tabela aqui: (16 + 64) * 4 = 320 bytes
+   Próxima potência de 2 >= 320 é 512.
 */
-.balign 128
+.balign 512
 g_pfnVectors:
   .word _estack
   .word Reset_Handler
@@ -41,9 +42,11 @@ g_pfnVectors:
   .word 0
   .word Default_Handler     /* PendSV */
 
-  /* ✅ CRÍTICO: handler em Thumb -> +1 */
+  /* ✅ Swift @_cdecl pode não vir marcado como Thumb pro linker,
+     então +1 é uma garantia prática aqui. */
   .word (SysTick_Handler + 1) /* SysTick */
 
+  /* 64 IRQs "genéricos" (ok pra começar) */
   .rept 64
     .word Default_Handler
   .endr

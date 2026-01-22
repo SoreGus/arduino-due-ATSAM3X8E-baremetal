@@ -1,13 +1,22 @@
 ENTRY(Reset_Handler)
 
 /* Arduino Due (ATSAM3X8E)
-   FLASH: 512 KB @ 0x00080000
-   SRAM :  96 KB @ 0x20070000
+   FLASH total: 512 KB @ 0x00080000 .. 0x000FFFFF
+
+   ✅ Reserva 1 página (256 bytes) NO FIM da FLASH para persistência:
+      NVM (Flash page): 0x000FFF00 .. 0x000FFFFF
+
+   SRAM : 96 KB @ 0x20070000
 */
 
 MEMORY
 {
-  FLASH (rx)  : ORIGIN = 0x00080000, LENGTH = 512K
+  /* FLASH "do firmware": termina antes da última página */
+  FLASH (rx)  : ORIGIN = 0x00080000, LENGTH = 512K - 256
+
+  /* Última página da flash reservada para storage */
+  NVM   (rx)  : ORIGIN = 0x000FFF00, LENGTH = 256
+
   RAM   (rwx) : ORIGIN = 0x20070000, LENGTH = 96K
 }
 
@@ -63,6 +72,9 @@ SECTIONS
   __flash_end = .;
   _etext = __flash_end;
 
+  /* Safety: firmware não pode invadir a NVM reservada */
+  ASSERT(__flash_end <= ORIGIN(FLASH) + LENGTH(FLASH), "FLASH overflow: firmware invadiu a area NVM reservada!")
+
   /* Start of init values for .data (in FLASH) */
   _sidata = __flash_end;
 
@@ -93,6 +105,17 @@ SECTIONS
   . = ALIGN(8);
   _end = .;
   PROVIDE(end = .);
+
+  /* ✅ Reserva explícita da página de NVM
+     - NOLOAD: não grava bytes no bin (fica "livre"), mas a área fica reservada no link.
+     - Você vai programar/gravar nela em runtime via EEFC.
+  */
+  .nv_storage (NOLOAD) :
+  {
+    __nv_start = .;
+    . = ORIGIN(NVM) + LENGTH(NVM); /* força ocupar toda a região */
+    __nv_end = .;
+  } > NVM
 
   /DISCARD/ :
   {

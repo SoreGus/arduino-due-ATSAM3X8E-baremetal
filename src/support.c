@@ -18,7 +18,7 @@ void bm_dsb(void) { __asm__ volatile ("dsb 0xF" ::: "memory"); }
 __attribute__((used))
 void bm_isb(void) { __asm__ volatile ("isb 0xF" ::: "memory"); }
 
-// ✅ Volatile MMIO (isso evita o "read otimizado" que trava wait loops)
+// ✅ Volatile MMIO (evita "read otimizado" que trava wait loops)
 __attribute__((used))
 uint32_t bm_read32(uint32_t addr) {
   return *(volatile uint32_t*)addr;
@@ -29,6 +29,9 @@ void bm_write32(uint32_t addr, uint32_t value) {
   *(volatile uint32_t*)addr = value;
 }
 
+// -----------------------------------------------------------------------------
+// Stack protector (Swift pode exigir isso dependendo de flags/toolchain)
+// -----------------------------------------------------------------------------
 uintptr_t __stack_chk_guard = 0xBAADF00Du;
 
 __attribute__((noreturn))
@@ -36,6 +39,9 @@ void __stack_chk_fail(void) {
   while (1) { __asm__ volatile ("nop"); }
 }
 
+// -----------------------------------------------------------------------------
+// Tiny heap for posix_memalign (Swift runtime usa isso para algumas alocações)
+// -----------------------------------------------------------------------------
 extern uint32_t _end;      // provided by linker.ld
 extern uint32_t _estack;   // top of stack (end of RAM)
 
@@ -71,12 +77,101 @@ int posix_memalign(void **memptr, size_t alignment, size_t size) {
 
 void free(void *ptr) { (void)ptr; }
 
-void __aeabi_memclr(void *dest, size_t n) {
+// -----------------------------------------------------------------------------
+// Minimal libc-like memory primitives (NO libc)
+// Swift/LLVM pode chamar memset/memcpy/memmove e/ou __aeabi_* diretamente.
+// -----------------------------------------------------------------------------
+
+__attribute__((used))
+void *memset(void *dest, int c, size_t n) {
   uint8_t *p = (uint8_t*)dest;
-  while (n--) *p++ = 0;
+  uint8_t v = (uint8_t)c;
+  while (n--) *p++ = v;
+  return dest;
 }
 
-// Swift hashing seed wants arc4random_buf. Provide a tiny PRNG (NOT crypto-secure).
+__attribute__((used))
+void *memcpy(void *dest, const void *src, size_t n) {
+  uint8_t *d = (uint8_t*)dest;
+  const uint8_t *s = (const uint8_t*)src;
+  while (n--) *d++ = *s++;
+  return dest;
+}
+
+__attribute__((used))
+void *memmove(void *dest, const void *src, size_t n) {
+  uint8_t *d = (uint8_t*)dest;
+  const uint8_t *s = (const uint8_t*)src;
+
+  if (d == s || n == 0) return dest;
+
+  if (d < s) {
+    while (n--) *d++ = *s++;
+  } else {
+    d += n;
+    s += n;
+    while (n--) *--d = *--s;
+  }
+  return dest;
+}
+
+// -----------------------------------------------------------------------------
+// ARM EABI helpers (críticos para o seu erro atual)
+// -----------------------------------------------------------------------------
+
+// Signature used by many compilers:
+//   void __aeabi_memset(void *dest, size_t n, int c);
+__attribute__((used))
+void __aeabi_memset(void *dest, size_t n, int c) {
+  (void)memset(dest, c, n);
+}
+
+__attribute__((used))
+void __aeabi_memset4(void *dest, size_t n, int c) {
+  (void)memset(dest, c, n);
+}
+
+__attribute__((used))
+void __aeabi_memset8(void *dest, size_t n, int c) {
+  (void)memset(dest, c, n);
+}
+
+// Some toolchains call memclr/memclr4/memclr8
+__attribute__((used))
+void __aeabi_memclr(void *dest, size_t n) {
+  (void)memset(dest, 0, n);
+}
+
+__attribute__((used))
+void __aeabi_memclr4(void *dest, size_t n) {
+  (void)memset(dest, 0, n);
+}
+
+__attribute__((used))
+void __aeabi_memclr8(void *dest, size_t n) {
+  (void)memset(dest, 0, n);
+}
+
+// Also common:
+//   void __aeabi_memcpy(void *dest, const void *src, size_t n);
+__attribute__((used))
+void __aeabi_memcpy(void *dest, const void *src, size_t n) {
+  (void)memcpy(dest, src, n);
+}
+
+__attribute__((used))
+void __aeabi_memcpy4(void *dest, const void *src, size_t n) {
+  (void)memcpy(dest, src, n);
+}
+
+__attribute__((used))
+void __aeabi_memcpy8(void *dest, const void *src, size_t n) {
+  (void)memcpy(dest, src, n);
+}
+
+// -----------------------------------------------------------------------------
+// Swift hashing seed wants arc4random_buf. Tiny PRNG (NOT crypto-secure).
+// -----------------------------------------------------------------------------
 static uint32_t g_rng = 0x12345678u;
 
 static uint32_t xorshift32(void) {
@@ -88,6 +183,7 @@ static uint32_t xorshift32(void) {
   return x;
 }
 
+__attribute__((used))
 void arc4random_buf(void *buf, size_t n) {
   uint8_t *p = (uint8_t*)buf;
   while (n) {
